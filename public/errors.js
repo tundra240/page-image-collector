@@ -164,6 +164,91 @@
       selfHeal: 'retry'
     },
 
+    /* ------------------------------------------------------ request handling
+
+       These five exist because Express answers with an HTML page when a request never
+       reaches a handler — a path it does not know, a body it cannot parse, a body too
+       large, or anything that throws. HTML carries no code, the front end falls back to
+       UNKNOWN, and the user is told "Something went wrong" with no advice attached.
+
+       Each is a real situation rather than a hypothetical: a page left open across an
+       update posting to a renamed endpoint, a mangled body, an id garbled in a link. */
+
+    UNKNOWN_ENDPOINT: {
+      code: 'UNKNOWN_ENDPOINT',
+      where: 'server',
+      http: 404,
+      message: 'The app asked the server for something it does not offer.',
+      meaning: 'A request arrived for an API address the server has no handler for. Almost '
+             + 'always a mismatch between the page in the browser and the server behind it.',
+      causes: [
+        'The page was left open while the app was updated, so an old app.js is calling a renamed endpoint',
+        'The address was typed or edited by hand',
+        'Something other than this app is making requests to the port'
+      ],
+      fix: 'Reload the page with Ctrl+Shift+R, which fetches the current front end rather than '
+         + 'a cached copy. If it persists, restart the app so both halves are the same version.',
+      selfHeal: 'none'
+    },
+
+    BAD_REQUEST_BODY: {
+      code: 'BAD_REQUEST_BODY',
+      where: 'server',
+      http: 400,
+      message: 'The request was malformed, so the server could not read it.',
+      meaning: 'The body did not parse as JSON. The request never reached the code that would '
+             + 'have handled it, so nothing was started and nothing was changed.',
+      causes: [
+        'A request was interrupted part way through',
+        'Something between the page and the server altered the body',
+        'A hand-made request with invalid JSON'
+      ],
+      fix: 'Try the same action again. If every attempt fails, reload the page with '
+         + 'Ctrl+Shift+R in case an old front end is sending something the server no longer expects.',
+      selfHeal: 'retry'
+    },
+
+    REQUEST_TOO_LARGE: {
+      code: 'REQUEST_TOO_LARGE',
+      where: 'server',
+      http: 413,
+      message: 'That request was too large to accept.',
+      meaning: 'Request bodies are capped deliberately — this app only ever needs to send an '
+             + 'address and a couple of numbers, so anything large is a mistake rather than a '
+             + 'need. Accepting it would mean holding it in memory first.',
+      causes: ['An extremely long address was pasted', 'A hand-made request carrying a large payload'],
+      fix: 'Check the address in the box is an address rather than a pasted page of text.',
+      selfHeal: 'none'
+    },
+
+    BAD_REQUEST_PATH: {
+      code: 'BAD_REQUEST_PATH',
+      where: 'server',
+      http: 400,
+      message: 'That address could not be understood.',
+      meaning: 'The address of the request itself could not be decoded — it contains an escape '
+             + 'sequence that is not valid, such as a stray % sign.',
+      causes: ['A link was truncated or mangled before it was followed',
+               'An address was edited by hand'],
+      fix: 'Go back to the app and click the image again rather than reusing the address.',
+      selfHeal: 'none'
+    },
+
+    SERVER_ERROR: {
+      code: 'SERVER_ERROR',
+      where: 'server',
+      http: 500,
+      message: 'The server hit an unexpected problem.',
+      meaning: 'Something failed in a way none of the other entries describe. This exists so '
+             + 'such a failure still arrives with a code attached instead of as an HTML error '
+             + 'page, which the front end could only report as "Something went wrong".',
+      causes: ['A bug', 'The machine running out of memory or file handles',
+               'A dependency behaving unexpectedly'],
+      fix: 'Read the text after the message — that is the real error. Restart the app, and if it '
+         + 'repeats, note what you did just before it happened.',
+      selfHeal: 'none'
+    },
+
     /* --------------------------------------------------------------- browser */
 
     SERVER_UNREACHABLE: {

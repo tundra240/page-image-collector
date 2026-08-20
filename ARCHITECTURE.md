@@ -206,6 +206,40 @@ either matches a captured URL or 404s.
 Error handling is deliberately user-facing: a timeout becomes *"The page took too long to
 load"* rather than a stack trace (`server.js:215`).
 
+### Every failure arrives with a code
+
+Handlers answer through `fail()`, so anything the app recognises carries a stable code. Express's
+own defaults do not — an unknown endpoint, an unparseable body, an oversized body, or anything
+that throws are all answered with an **HTML page**. HTML carries no code, so the front end falls
+back to `UNKNOWN` and shows *"Something went wrong"*: the one message in the catalogue that can
+offer no advice, for exactly the failures where advice would help most.
+
+Two middlewares close that gap, and their order is load-bearing — the 404 must come after every
+route or it would swallow them, and the error handler must be last of all, since Express
+recognises it by its four arguments. Between them they add `UNKNOWN_ENDPOINT`,
+`BAD_REQUEST_BODY`, `REQUEST_TOO_LARGE`, `BAD_REQUEST_PATH` and `SERVER_ERROR`. body-parser's own
+`error.type` is used to tell its failures apart, rather than matching against messages.
+
+| Request | Was | Now |
+|---|---|---|
+| Unknown API route | 404 HTML | 404 `UNKNOWN_ENDPOINT` |
+| GET on a POST-only endpoint | 404 HTML | 404 `UNKNOWN_ENDPOINT` |
+| Malformed JSON body | 400 HTML | 400 `BAD_REQUEST_BODY` |
+| Body over the limit | 413 HTML | 413 `REQUEST_TOO_LARGE` |
+| Undecodable path, e.g. a stray `%` | 400 HTML | 400 `BAD_REQUEST_PATH` |
+| Anything that throws | 500 HTML | 500 `SERVER_ERROR`, and logged |
+
+`test/api.test.js` asserts each of those answers with `application/json` and a documented code.
+The tests were written first and all six failed, which is how the gap was located rather than
+guessed at.
+
+**The same drift had happened on the front end.** `NOTHING_SELECTED`, `NO_DIRECTORY_PICKER`,
+`SAVE_READ_FAILED` and `SAVE_CANCELLED` were all documented and then not used — `app.js` carried
+its own copies of their text, so `ERRORS.md` described wording the app never actually showed.
+They now come from `lookup()`, and a test fails if the copies return. `SAVE_CANCELLED` was not
+shown at all before: dismissing the folder picker did nothing visible, which read as a missed
+click.
+
 ## 10. Front-end
 
 Four files, no build step, no framework.

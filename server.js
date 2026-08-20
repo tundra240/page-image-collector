@@ -553,6 +553,43 @@ app.get('/api/image/:id', (req, res) => {
   res.type(image.contentType).send(image.body);
 });
 
+/* ============================================================================
+   The last two middlewares, and the reason they exist.
+
+   Everything above answers through fail(), so every failure it knows about arrives with
+   a stable code. Express's own defaults do not: a request for an endpoint that does not
+   exist, a body it cannot parse, a body over the limit, or anything that throws all get
+   answered with an HTML error page. HTML carries no code, so the front end falls back to
+   UNKNOWN and reports "Something went wrong" — the one message in the catalogue that can
+   offer no advice, for the failures where advice would help most.
+
+   These two close that gap. Order is load-bearing: the 404 has to come after every
+   route or it would swallow them, and the error handler has to come last of all, since
+   Express recognises it by its four arguments.
+   ========================================================================== */
+
+// Only /api — a missing PAGE should still get a page, not JSON.
+app.use('/api', (req, res) => fail(res, 'UNKNOWN_ENDPOINT'));
+
+app.use((error, req, res, next) => {
+  // A failure after the response has started is not something that can be reported in
+  // the response. Handing it back lets Express close the connection.
+  if (res.headersSent) return next(error);
+
+  // body-parser labels its own failures, which is more reliable than matching messages.
+  if (error && error.type === 'entity.too.large') return fail(res, 'REQUEST_TOO_LARGE');
+  if (error && (error.type === 'entity.parse.failed' || error instanceof SyntaxError)) {
+    return fail(res, 'BAD_REQUEST_BODY');
+  }
+  // Thrown while decoding the request path, e.g. a stray % in an image id.
+  if (error instanceof URIError) return fail(res, 'BAD_REQUEST_PATH');
+
+  /* Anything else. Logged as well as returned, because this is the branch that means a
+     bug, and the terminal is where somebody will look for it. */
+  console.error('Unhandled request failure:', error);
+  return fail(res, 'SERVER_ERROR', (error && error.message) || '');
+});
+
 const server = app.listen(PORT, '127.0.0.1', () => {
   const address = `http://127.0.0.1:${PORT}`;
   console.log(`Page Image Collector is running at ${address}`);

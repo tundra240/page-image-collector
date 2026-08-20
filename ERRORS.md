@@ -22,6 +22,11 @@ may be reworded; **codes are the contract** and are what the app matches on.
 | [`IMAGE_EXPIRED`](#image-expired) | server | 404 | No — advice only |
 | [`REVEAL_NOT_FOUND`](#reveal-not-found) | server | 404 | No — advice only |
 | [`REVEAL_FAILED`](#reveal-failed) | server | 500 | Yes — `retry` |
+| [`UNKNOWN_ENDPOINT`](#unknown-endpoint) | server | 404 | No — advice only |
+| [`BAD_REQUEST_BODY`](#bad-request-body) | server | 400 | Yes — `retry` |
+| [`REQUEST_TOO_LARGE`](#request-too-large) | server | 413 | No — advice only |
+| [`BAD_REQUEST_PATH`](#bad-request-path) | server | 400 | No — advice only |
+| [`SERVER_ERROR`](#server-error) | server | 500 | No — advice only |
 | [`SERVER_UNREACHABLE`](#server-unreachable) | browser | — | Yes — `restart-server` |
 | [`NOTHING_SELECTED`](#nothing-selected) | browser | — | No — advice only |
 | [`NO_DIRECTORY_PICKER`](#no-directory-picker) | browser | — | No — advice only |
@@ -211,6 +216,94 @@ Returned by the API as JSON: `{ error, code }`. The front end shows the message 
 **How to fix it.** Check the page still loads in a normal tab. The image itself is unaffected — it is already captured and can still be saved.
 
 **Automatic handling:** `retry`.
+
+### UNKNOWN_ENDPOINT
+
+> The app asked the server for something it does not offer.
+
+**HTTP status:** `404`
+
+**What it means.** A request arrived for an API address the server has no handler for. Almost always a mismatch between the page in the browser and the server behind it.
+
+**Common causes**
+
+- The page was left open while the app was updated, so an old app.js is calling a renamed endpoint
+- The address was typed or edited by hand
+- Something other than this app is making requests to the port
+
+**How to fix it.** Reload the page with Ctrl+Shift+R, which fetches the current front end rather than a cached copy. If it persists, restart the app so both halves are the same version.
+
+**Automatic handling:** none — the app explains it and waits for you.
+
+### BAD_REQUEST_BODY
+
+> The request was malformed, so the server could not read it.
+
+**HTTP status:** `400`
+
+**What it means.** The body did not parse as JSON. The request never reached the code that would have handled it, so nothing was started and nothing was changed.
+
+**Common causes**
+
+- A request was interrupted part way through
+- Something between the page and the server altered the body
+- A hand-made request with invalid JSON
+
+**How to fix it.** Try the same action again. If every attempt fails, reload the page with Ctrl+Shift+R in case an old front end is sending something the server no longer expects.
+
+**Automatic handling:** `retry`.
+
+### REQUEST_TOO_LARGE
+
+> That request was too large to accept.
+
+**HTTP status:** `413`
+
+**What it means.** Request bodies are capped deliberately — this app only ever needs to send an address and a couple of numbers, so anything large is a mistake rather than a need. Accepting it would mean holding it in memory first.
+
+**Common causes**
+
+- An extremely long address was pasted
+- A hand-made request carrying a large payload
+
+**How to fix it.** Check the address in the box is an address rather than a pasted page of text.
+
+**Automatic handling:** none — the app explains it and waits for you.
+
+### BAD_REQUEST_PATH
+
+> That address could not be understood.
+
+**HTTP status:** `400`
+
+**What it means.** The address of the request itself could not be decoded — it contains an escape sequence that is not valid, such as a stray % sign.
+
+**Common causes**
+
+- A link was truncated or mangled before it was followed
+- An address was edited by hand
+
+**How to fix it.** Go back to the app and click the image again rather than reusing the address.
+
+**Automatic handling:** none — the app explains it and waits for you.
+
+### SERVER_ERROR
+
+> The server hit an unexpected problem.
+
+**HTTP status:** `500`
+
+**What it means.** Something failed in a way none of the other entries describe. This exists so such a failure still arrives with a code attached instead of as an HTML error page, which the front end could only report as "Something went wrong".
+
+**Common causes**
+
+- A bug
+- The machine running out of memory or file handles
+- A dependency behaving unexpectedly
+
+**How to fix it.** Read the text after the message — that is the real error. Restart the app, and if it repeats, note what you did just before it happened.
+
+**Automatic handling:** none — the app explains it and waits for you.
 
 ---
 

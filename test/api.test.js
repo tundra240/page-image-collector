@@ -61,6 +61,61 @@ test('a missing image reports IMAGE_EXPIRED, not a bare 404', async () => {
   assert.equal(body.code, 'IMAGE_EXPIRED');
 });
 
+/* ------------------------------------------------------------------------------
+   Every failure the app can answer with must be coded JSON.
+
+   "Something went wrong" is the UNKNOWN fallback, and the front end only reaches it
+   when a response carries no code — so every uncoded response is a guaranteed sighting
+   of that message with no advice attached. Express's own defaults are the hole: a
+   malformed body, an oversized body, or a path that does not exist are all answered
+   with an HTML page, long before any handler runs.
+
+   These cases are not exotic. A stale page posting to a renamed endpoint, a proxy
+   mangling a body, a bad id in a URL - each lands here, and each used to be
+   indistinguishable from a bug in the scan itself.
+   ---------------------------------------------------------------------------- */
+
+const UNCODED_CASES = [
+  ['an unknown API route', '/api/does-not-exist', undefined],
+  ['a GET on a POST-only endpoint', '/api/reveal', undefined],
+  ['a malformed JSON body', '/api/scan',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' }],
+  ['a malformed body to reveal', '/api/reveal',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{oops' }],
+  ['a body over the size limit', '/api/scan',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: `{"url":"https://example.com/${'x'.repeat(2 * 1024 * 1024)}"}` }],
+  ['an unencodable id in the path', '/api/image/%%%%', undefined]
+];
+
+for (const [label, path, init] of UNCODED_CASES) {
+  test(`${label} is answered with JSON and a known code`, async () => {
+    const response = await fetch(BASE + path, init);
+    const type = (response.headers.get('content-type') || '').split(';')[0];
+    assert.equal(type, 'application/json',
+      `${label} answered with ${type}, so the front end has no code to look up ` +
+      'and shows "Something went wrong"');
+
+    const body = await response.json();
+    assert.ok(body.code, `${label} answered without a code: ${JSON.stringify(body)}`);
+    assert.ok(body.code in ERRORS, `${label} reported an undocumented code: ${body.code}`);
+    assert.ok(body.error, `${label} answered without a message`);
+  });
+}
+
+test('the front end reads its wording from the catalogue, not copies of it', async () => {
+  /* Four browser-side codes were documented and then not used: app.js carried its own
+     copies of their text. That is the drift the shared catalogue exists to prevent -
+     ERRORS.md described wording the app never actually showed. */
+  const app = await (await fetch(BASE + '/app.js')).text();
+  for (const code of ['NOTHING_SELECTED', 'NO_DIRECTORY_PICKER', 'SAVE_READ_FAILED', 'SAVE_CANCELLED']) {
+    assert.ok(app.includes(code),
+      `app.js should look up ${code} rather than repeating its message`);
+    assert.ok(!app.includes(ERRORS[code].message),
+      `app.js repeats the text of ${code} instead of looking it up`);
+  }
+});
+
 test('every error response carries both a message and a code', async () => {
   // The whole point of the catalogue: the front end must always have something to match on.
   for (const url of ['', 'nonsense', 'file:///etc/passwd', 'ftp://x.test']) {

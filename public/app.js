@@ -770,22 +770,39 @@ function setAllVisible(checked) {
 document.querySelector('#all').onclick = () => setAllVisible(true);
 document.querySelector('#none').onclick = () => setAllVisible(false);
 
+/* Every message here comes from the catalogue rather than being written inline.
+
+   Four codes — NOTHING_SELECTED, NO_DIRECTORY_PICKER, SAVE_READ_FAILED and
+   SAVE_CANCELLED — were documented in errors.js and then not used: this function carried
+   its own copies of their text. So ERRORS.md described wording the app never actually
+   showed, and improving one did nothing to the other. That is precisely the drift a
+   shared catalogue exists to prevent, and a test now fails if the copies come back. */
 saveButton.onclick = async () => {
   const chosen = selected();
-  if (!chosen.length) return setStatus('Select at least one image first.', true);
-  if (!window.showDirectoryPicker) return setStatus('Your browser does not support the native folder picker. Open this app in current Chrome or Edge.', true);
+  if (!chosen.length) return setStatus(lookup('NOTHING_SELECTED').message, true);
+  if (!window.showDirectoryPicker) return setStatus(lookup('NO_DIRECTORY_PICKER').message, true);
   try {
     const folder = await window.showDirectoryPicker({ mode: 'readwrite' });
     saveButton.disabled = true;
     for (let i = 0; i < chosen.length; i++) {
       setStatus(`Saving ${i + 1} of ${chosen.length}…`);
       const image = chosen[i]; const response = await fetch(`/api/image/${image.id}`);
-      if (!response.ok) throw new Error(`Could not read ${image.name}. Scan again and retry.`);
+      if (!response.ok) {
+        // Named, so the catch below can tell this apart from the picker being dismissed.
+        const failure = new Error(`${lookup('SAVE_READ_FAILED').message} (${image.name})`);
+        failure.code = 'SAVE_READ_FAILED';
+        throw failure;
+      }
       const file = await folder.getFileHandle(image.name, { create: true });
       const writable = await file.createWritable(); await writable.write(await response.blob()); await writable.close();
     }
     setStatus(`Saved ${chosen.length} image${chosen.length === 1 ? '' : 's'} to the folder you chose.`);
   } catch (error) {
-    if (error.name !== 'AbortError') setStatus(error.message || 'Saving was cancelled.', true);
+    /* Dismissing the picker is an AbortError, and it is a normal outcome rather than a
+       fault — so it is reported plainly instead of in red, and reported at all rather
+       than silently, which previously left the button looking as though it had missed
+       the click. */
+    if (error.name === 'AbortError') setStatus(lookup('SAVE_CANCELLED').message);
+    else setStatus(error.message || lookup('UNKNOWN').message, true);
   } finally { saveButton.disabled = false; }
 };
