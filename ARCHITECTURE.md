@@ -256,89 +256,16 @@ activeTypes = Set()     // which content types are currently shown
   grid — the obvious alternative — costs 4× per halving of cell size and never converges on a
   curve; it only shortens the flat spots.
 
-  **The cursor displaces the field — a domain warp.** Near the pointer, each sample reads the
-  field from slightly *behind* the direction of travel, so the lines already there are dragged
-  along and then relax back. Nothing is added to the field's value, which is the whole point:
-  nothing can be erased and no new shape can appear, so the only visible result is existing
-  topography moving, the way a liquid's surface does when something is drawn through it.
-
-  **Two earlier attempts were wrong, and measuring is what showed it.** The first raised a hill
-  under the cursor; where the field was already high it pushed whole areas above the topmost
-  level and the lines there *vanished* instead of moving — **33% less** line under the cursor than
-  away from it. The second used a radial ripple, which fixed the erasing (**+107%**) but drew its
-  own concentric rings: a bullseye stuck to the cursor, plainly a separate object rather than the
-  landscape reacting. Only changing *where the field is sampled* rather than *what it evaluates
-  to* does what was actually wanted.
-
-  There is also deliberately **no global parallax lean**. An earlier version slid the whole field
-  with the pointer, and a deterministic test — `requestAnimationFrame` replaced by a manual
-  stepper, so two runs with identical frame sequences produce byte-identical fields — showed
-  **193%** of lit pixels moving on the *far* side of the window from the cursor, as many as beside
-  it. That is a rigid translation of everything, the opposite of a liquid, and it drowned the
-  local effect. With it gone the same test reads **197% near the cursor, 0.1% far** — genuinely
-  local.
-
-  The drag magnitude comes free from the easing: the gap between where the cursor *is* and where
-  the eased position has reached is already a velocity signal, opening while the pointer moves and
-  closing to zero when it stops. So no velocity tracking, no timestamps, and the lines inherit the
-  easing's settle time. The disturbance is centred on the **actual** cursor, not the eased
-  position — using the eased one was a bug, since during a quick movement that lag is hundreds of
-  pixels and the effect detached from the pointer entirely.
-
-  Position and strength are eased on **elapsed time**, for the reason `progress.js` sets out — a
-  per-frame fraction silently runs faster on a 144Hz display — with the frame delta clamped the
-  same way so returning to a hidden tab does not teleport anything.
-
-  **How sticky it feels was tuned against a measurement**, not by eye. Mean displacement still
-  remaining beside the cursor after it stops dead, against a cursor-free run of the same frames:
-
-  | After the cursor stops | 0 ms | 100 ms | 200 ms | 300 ms | 500 ms |
-  |---|---|---|---|---|---|
-  | First attempt | 16.0px | 14.5px | 14.9px | 11.8px | 6.6px |
-  | Now | 17.1px | 16.0px | 15.2px | 8.3px | **2.3px** |
-
-  A third of the displacement was still there half a second after the pointer stopped, which is
-  what read as clinging. Halving the settle time fixes it. Peak displacement came *down* at the
-  same time (≈67px → ≈43px) while the radius went *up*, and the falloff changed from a square to
-  a smoothstep: a narrow strong disturbance reads as a grip on one spot, a wide gentle one as a
-  body of liquid moving. The mean barely moved because the same displacement is spread wider.
-
-  Note the metric — an earlier one counted changed pixels and was worthless, since the lines are
-  a pixel or two wide and any residual offset past that pins the figure at ~200% whether the lines
-  are 2px or 60px out of place. Distance to the nearest line in the undisturbed frame is what
-  actually measures a displacement.
-
-  **The cursor also leaves a wake.** The warp alone is a function of where the pointer is *now*,
-  so stopping made the disturbance shrink away on the spot — nothing in the model remembered the
-  cursor had been anywhere else. It now sheds a trail of decaying impulses, each a miniature of
-  the same warp, rotated alternately to either side so a straight drag curls the way a real wake
-  sheds to alternating sides.
-
-  Judging this needed a *different* measurement, because "the disturbance lasts longer" is also
-  exactly what stickiness looks like — a settle curve cannot separate them. What does is **where**
-  the leftover displacement sits. Dragging left to right, stopping dead, and sampling three places:
-
-  | 200 ms after stopping | Without wake | With wake |
-  |---|---|---|
-  | At the cursor | 18.3px | 21.0px |
-  | At the drag's start, 400px behind | **1.4px** | **12.0px** |
-  | Far away (control) | 0.0px | 0.0px |
-
-  Without it the start of the drag is already at rest while the cursor's own patch is fully
-  displaced — one blob following the pointer. With it, the whole path is still moving and settles
-  over ~400ms, and the control is untouched either way, so it stays strictly local.
-
-  It costs ~0.12ms (0.92 → 1.03ms with the cursor moving every frame) for twelve impulses. Each
-  row first works out which impulses are near enough to matter, so rows away from the trail test
-  none of them, and each impulse is converted into field units once per frame rather than once per
-  sample.
-
-  It costs about **3%** (0.88–0.93 ms still, 0.93–0.95 ms with the cursor moving every frame),
-  inside the run-to-run spread. Timing this needed a second attempt: dispatching one pointer move
-  reported it as entirely free, because the lag closes after a single frame and the warp switches
-  itself off. The warp has compact support and needs no divide, `exp` or square root — the falloff
-  uses squared distance only. Under `prefers-reduced-motion` **no pointer listeners are registered
-  at all**; cursor tracking is motion.
+  **The background does not react to the cursor.** It did for several iterations — a domain warp
+  that dragged the lines along with the pointer and left a decaying wake behind it — and it was
+  removed deliberately: a background answering every mouse movement competes with the interface in
+  front of it. Worth recording what those iterations established, since the same ground would be
+  covered again by anyone reinstating it: adding to the field’s *value* is the wrong lever (a hill
+  under the cursor pushed whole areas past the topmost level and **erased** lines, measured at 33%
+  less line under the cursor; a radial ripple fixed that but drew its own bullseye), a global
+  parallax lean translates everything rigidly and drowns any local effect (**193%** of pixels moving
+  on the far side of the window), and a settle curve cannot distinguish a fluid wake from mere
+  stickiness — only *where* the residual displacement sits can.
 
   Scroll-linked drift survived the move but changed mechanism: it was
   `animation-timeline: scroll()` on the layer, and is now a term added to the field, since the

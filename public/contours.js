@@ -63,77 +63,6 @@
    spots shorter. This converges, because it is fitting curves rather than shortening
    lines.
 
-   THE WAKE, AND WHY A SETTLE CURVE CANNOT JUDGE IT
-
-   The warp on its own is a function of where the cursor is now, so stopping made the
-   whole disturbance shrink away on the spot - there was nothing in the model that
-   remembered the cursor had ever been anywhere else. The wake fixes that by leaving a
-   trail of decaying impulses behind the pointer.
-
-   Judging it needed a different measurement, because "the disturbance lasts longer" is
-   ALSO what stickiness looks like, and a settle curve cannot tell the two apart. What
-   separates them is WHERE the leftover displacement is: clinging to the cursor, or lying
-   along the path it took. So the cursor is dragged left to right, stopped dead, and
-   three places are sampled:
-
-                            without the wake        with the wake
-     at the cursor  +200ms        18.3px                21.0px
-     at the START   +200ms         1.4px                12.0px
-     far away       +200ms          0.0px                 0.0px
-
-   The start of the drag is 400px behind where the cursor finished. Without the wake it
-   is already back at rest while the cursor's own patch is still fully displaced - one
-   blob, following the pointer. With it, the whole path is still moving and settles over
-   about 400ms, and the control is untouched either way, so it stays strictly local.
-
-   WHAT THE POINTER COSTS
-
-   Three runs at 1920x1080, cursor still against cursor moving on every single frame:
-
-     cursor still    0.90  0.91  0.90 ms
-     cursor moving   1.04  1.04  1.02 ms
-
-   The wake is most of that: 0.92ms before it existed, 1.03ms after, so it costs about
-   0.12ms - roughly 0.7% of a frame - for twelve impulses. It stays that cheap because
-   each row first works out which impulses are near enough to matter, so rows away from
-   the trail test none of them, and because the conversion of each impulse into field
-   units happens once per frame rather than once per sample.
-
-   Measuring this correctly took a second attempt. Dispatching one pointer move and
-   then timing 200 frames reported the feature as entirely free - but the drag is
-   derived from the gap between the cursor and its eased position, so after a single
-   frame that gap closes, the warp switches itself off, and the run was timing a
-   settled cursor. Moving it every frame is the honest worst case.
-
-   It stays cheap because the warp has COMPACT SUPPORT: samples outside the radius do
-   two comparisons and move on, and the ones inside do a handful of multiplies - no
-   divide, no exp, and no square root anywhere, since the falloff needs only squared
-   distance. The listener does nothing but store two numbers, leaving the
-   already-running rAF loop to read them.
-
-   HOW STICKY IT FEELS, AND HOW THAT WAS TUNED
-
-   Mean displacement still remaining in a patch beside the cursor, at intervals after
-   the cursor stopped dead. Both columns measured the same way, against a cursor-free
-   run of the identical frame sequence:
-
-     after the cursor stops     0ms     100ms    200ms    300ms    500ms
-     first attempt             16.0px   14.5px   14.9px   11.8px    6.6px
-     now                       17.1px   16.0px   15.2px    8.3px    2.3px
-
-   The first attempt was still a third displaced half a second after the pointer had
-   stopped, which is what read as clinging. Halving the settle time gets that down to
-   2.3px - the lines follow the cursor and then let go.
-
-   Peak displacement came DOWN at the same time, from about 67px to 43px, while the
-   radius went UP. That combination is deliberate: a narrow strong disturbance reads as
-   a grip on one spot, a wide gentle one reads as a body of liquid moving. The mean
-   above barely changed because the same amount of movement is spread over a wider area.
-
-   Note the metric. An earlier attempt counted changed pixels and was useless - the
-   lines are a pixel or two wide, so any residual offset past that pins the figure at
-   ~200% whether the lines are 2px or 60px out of place. Distance to the nearest line in
-   the undisturbed frame is what actually measures a displacement.
    ========================================================================== */
 
 (function () {
@@ -185,108 +114,6 @@
       slime's scroll-driven drift, done here by offsetting the field instead. */
   const SCROLL_DRIFT = 0.9;
 
-  /* ---------------------------------------------------------------- pointer
-
-     The cursor DISPLACES the existing contours rather than adding anything of its own.
-
-     Two earlier attempts got this wrong in instructive ways. The first raised a hill
-     under the cursor, which pushed whole areas above the topmost level and erased the
-     lines there instead of moving them - measured at 33% LESS line under the cursor
-     than away from it. The second replaced the hill with a radial ripple, which fixed
-     the erasing (+107% line) but produced its own set of concentric rings: a bullseye
-     stuck to the cursor, clearly a separate object drawn on top rather than the
-     landscape reacting.
-
-     The fix for both is to stop changing the field's VALUE and change where it is
-     SAMPLED FROM - a domain warp. Near the cursor, each sample reads the field from
-     slightly behind the direction of travel, so the lines already there are dragged
-     along and then settle back. Nothing is added, so nothing can be erased and no new
-     shape can appear: the only thing that happens is the existing topography moving,
-     the way the surface of a liquid does when something is drawn through it. */
-
-  /* There is deliberately NO global parallax lean. An earlier version slid the whole
-     field with the pointer, and a deterministic comparison showed why that was wrong:
-     with the lean active, 193% of lit pixels moved in a region on the FAR side of the
-     window from the cursor - as many as next to it. That is a rigid translation of
-     everything, which is the opposite of a liquid, and it drowned the local effect it
-     was supposed to support. The cursor now only ever does local work. */
-
-  /* How strongly the drag displaces the pattern, against the cursor's own movement.
-     Raised in step with the shorter settle time below: the drag is derived from the lag
-     that easing leaves behind, so halving the settle time halves the lag, and without
-     this the effect would have quietly become half as strong at the same time. */
-  const POINTER_FLOW = 1.2;
-
-  /* Ceiling on that displacement, in field units. A violent flick produces a lag of
-     several hundred pixels, and left unbounded that shears the pattern into streaks -
-     the surface tears instead of flowing.
-
-     Tuned down from 1.15 after measuring: at that value a brisk drag moved 192% of the
-     lit pixels near the cursor, meaning essentially every line had left where it was.
-     Accurate to the physics, far more than "subtle". */
-  const POINTER_FLOW_MAX = 0.32;
-
-  /* Reach of the disturbance, in field units. Wide on purpose - a narrow one reads as
-     something gripping a spot and pulling it, where a wide one reads as a body of
-     liquid moving. This is the main dial for how "magnetic" it feels. */
-  const POINTER_RADIUS = 2.9;
-
-  /* Time constant for easing the tracked position toward the real one, in the sense
-     used by progress.js: the remaining gap shrinks to about 37% of itself in this
-     many milliseconds. Eased on ELAPSED TIME rather than per frame for exactly the
-     reason set out there - a per-frame fraction silently runs faster on a 144Hz
-     display, and every dropped frame becomes a visible hitch. */
-  /* ------------------------------------------------------------------ wake
-
-     The warp above is a function of where the cursor is NOW, and that is the ceiling on
-     how fluid it can feel. Stop moving and the whole disturbance shrinks away on the
-     spot, because there is nothing in the model that remembers the cursor was ever
-     anywhere else. Liquid does the opposite: the push outlives the thing that made it,
-     and what you actually watch is the wake settling after the finger has gone.
-
-     So the cursor now leaves a trail of small impulses behind it. Each is a miniature
-     version of the same warp - a position, a direction, and a strength that decays -
-     and the field is displaced by the live push plus every impulse still alive. The
-     visible result is a wake that trails the cursor and keeps moving after it stops. */
-
-  /** How many impulses are kept. A ring buffer, so the oldest is overwritten. */
-  const WAKE_MAX = 12;
-
-  /** How far the cursor must travel before another is dropped, in CSS pixels. Spacing
-      them by distance rather than by time keeps the wake even at any speed. */
-  const WAKE_SPACING = 26;
-
-  /** How long each impulse lasts. Longer than the live warp's settle, which is the
-      point: the wake is what is still moving once the cursor has stopped. */
-  const WAKE_LIFE_MS = 700;
-
-  /** Strength of a wake impulse against the live push. Below it on purpose - the wake
-      is a memory of the push, not a second one. */
-  const WAKE_FLOW = 0.5;
-
-  /** Reach of one impulse. Tighter than the live warp so the trail reads as a path
-      rather than one broad smear. */
-  const WAKE_RADIUS = 1.9;
-
-  /* Each impulse's push is rotated a little off the direction of travel, alternating
-     sign down the trail. That is what turns a straight drag into something that curls:
-     a real wake sheds vortices to alternating sides rather than trailing straight
-     behind. Cheap, too - the rotation happens once when the impulse is created, not per
-     sample. */
-  const WAKE_CURL = 0.55;
-
-  /* How long the lines take to flow back once the cursor stops.
-
-     This is the dial for "sticky". At 300ms the surface stayed displaced well after the
-     pointer had moved on, so the lines read as clinging to it - dragged along like
-     something magnetic rather than something being stirred. Halved, they return almost
-     as fast as they were pushed, which is what a thin liquid does.
-
-     It has a second effect, which is why the flow constant above moved with it: the drag
-     comes from the gap this easing leaves behind, so a shorter settle also means a
-     smaller gap. */
-  const POINTER_EASE_MS = 150;
-
   const still = matchMedia('(prefers-reduced-motion: reduce)');
 
   /* ---------------------------------------------------------------- state */
@@ -313,48 +140,6 @@
   // The polyline currently being traced, before it is drawn.
   let pathX = new Float32Array(0);
   let pathY = new Float32Array(0);
-
-  /* Pointer state. `target` is where the cursor actually is, in CSS pixels; `shown` is
-     the eased position the field is drawn from. Keeping them apart is what stops a fast
-     flick across the window from snapping the landscape sideways. */
-  let pointerTargetX = 0, pointerTargetY = 0;
-  let pointerShownX = 0, pointerShownY = 0;
-  /* How much of the effect to apply, 0 to 1, eased like the position. A boolean was not
-     enough: switching the drag off the instant the cursor left the window froze the
-     lines mid-displacement rather than letting them relax, which reads as the surface
-     seizing up. This fades instead, so they always flow back. */
-  let pointerTargetStrength = 0;
-  let pointerStrength = 0;
-  /** Whether the cursor has ever been located, which is when there is a position to snap to. */
-  let pointerLocated = false;
-  let pointerLast = 0;
-
-  /* The wake, as parallel arrays rather than an array of objects. Allocated once for the
-     same reason every other buffer here is: this is read inside the per-sample loop, and
-     objects would mean chasing a pointer per impulse per sample. */
-  const wakeX = new Float32Array(WAKE_MAX);
-  const wakeY = new Float32Array(WAKE_MAX);
-  const wakeVX = new Float32Array(WAKE_MAX);
-  const wakeVY = new Float32Array(WAKE_MAX);
-  /** Age in ms. Anything at or past WAKE_LIFE_MS is dead, so this doubles as "empty". */
-  const wakeAge = new Float32Array(WAKE_MAX).fill(WAKE_LIFE_MS);
-  let wakeNext = 0;                 // ring buffer write position
-  let wakeCurl = 1;                 // flips per impulse, see WAKE_CURL
-  let wakeFromX = 0, wakeFromY = 0; // where the last impulse was dropped
-
-  /* Which impulses can affect the row being sampled. Rebuilt per row, which keeps the
-     per-sample loop down to the handful actually in range instead of all twelve. */
-  const wakeRow = new Int32Array(WAKE_MAX);
-  let wakeRowCount = 0;
-
-  /* Per-frame scratch: each live impulse's centre and push, already converted into field
-     units. Doing that conversion once per frame rather than once per sample is the
-     difference between twelve multiplies and forty thousand. */
-  const wakeCX = new Float32Array(WAKE_MAX);
-  const wakeCY = new Float32Array(WAKE_MAX);
-  const wakePX = new Float32Array(WAKE_MAX);
-  const wakePY = new Float32Array(WAKE_MAX);
-  const wakeAlive = new Int32Array(WAKE_MAX);
 
   /* ---------------------------------------------------------------- sizing */
 
@@ -412,125 +197,11 @@
     // rather than stretching with the viewport.
     const scale = 6 / Math.max(320, Math.min(width, height));
 
-    /* Where the disturbance is centred, in field units. Put through the SAME transform
-       as the samples below, or the lines move somewhere other than under the cursor.
-
-       Centred on where the cursor ACTUALLY is, not on the eased position. Using the
-       eased one was a bug: the lag it leaves behind is hundreds of pixels during a
-       quick movement, so the disturbance trailed that far behind the pointer and, at
-       speed, detached from it completely - measured as no local change at all where
-       the cursor had just been. The eased position still has a job, but it is the one
-       below: supplying the drag, not the location. */
-    const ringX = pointerTargetX * scale;
-    const ringY = pointerTargetY * scale + scroll;
-    const invR2 = 1 / (POINTER_RADIUS * POINTER_RADIUS);
-
-    /* The drag direction and strength, taken from the gap between where the cursor IS
-       and where the eased position has got to.
-
-       That gap is already a velocity signal and costs nothing to obtain: it opens up
-       while the pointer is moving and closes to zero once it stops, which is exactly
-       the behaviour wanted. No separate velocity tracking, no timestamps, and it
-       inherits the easing's settle time - so when the cursor halts, the lines relax
-       back over the same couple of hundred milliseconds rather than snapping. */
-    let flowX = (pointerTargetX - pointerShownX) * scale * POINTER_FLOW * pointerStrength;
-    let flowY = (pointerTargetY - pointerShownY) * scale * POINTER_FLOW * pointerStrength;
-    const flow2 = flowX * flowX + flowY * flowY;
-    if (flow2 > POINTER_FLOW_MAX * POINTER_FLOW_MAX) {
-      // Clamped by length rather than per axis, so a diagonal flick is not allowed to
-      // travel further than a straight one.
-      const shrink = POINTER_FLOW_MAX / Math.sqrt(flow2);
-      flowX *= shrink;
-      flowY *= shrink;
-    }
-    /* Below this the displacement is a small fraction of a pixel. Skipping the whole
-       branch is what makes this free while the cursor is still, and free entirely when
-       it has never entered the window. */
-    const flowing = flow2 > 1e-8;
-
-    /* Wake impulses, converted once per frame into the same units as the samples.
-       WAKE_MAX is small and this is outside both loops, so it costs nothing. */
-    const wakeInvR2 = 1 / (WAKE_RADIUS * WAKE_RADIUS);
-    let wakeLive = 0;
-    for (let i = 0; i < WAKE_MAX; i++) {
-      if (wakeAge[i] >= WAKE_LIFE_MS) continue;
-      /* Squared decay rather than linear: an impulse should let go gently at the end,
-         and a linear fade stops with a visible kink as it reaches zero. */
-      const fade = 1 - wakeAge[i] / WAKE_LIFE_MS;
-      const push = WAKE_FLOW * fade * fade * pointerStrength * POINTER_FLOW_MAX;
-      wakeCX[i] = wakeX[i] * scale;
-      wakeCY[i] = wakeY[i] * scale + scroll;
-      wakePX[i] = wakeVX[i] * push;
-      wakePY[i] = wakeVY[i] * push;
-      wakeAlive[wakeLive++] = i;
-    }
-
     let index = 0;
     for (let row = 0; row <= rows; row++) {
-      const rowY = (originY + row * CELL) * scale + scroll;
-      const dy = rowY - ringY;
-      const dy2 = dy * dy;
-
-      /* Which impulses this row can possibly touch. Without this the inner loop tests
-         every impulse for every sample; with it, a row far from the trail tests none. */
-      wakeRowCount = 0;
-      for (let n = 0; n < wakeLive; n++) {
-        const i = wakeAlive[n];
-        const d = rowY - wakeCY[i];
-        if (d * d < WAKE_RADIUS * WAKE_RADIUS) wakeRow[wakeRowCount++] = i;
-      }
-
+      const py = (originY + row * CELL) * scale + scroll;
       for (let col = 0; col <= cols; col++) {
-        const colX = (originX + col * CELL) * scale;
-
-        /* The warp. Where a sample READS FROM is shifted, not what it evaluates to -
-           so the field's own shape is untouched and the only visible result is the
-           contours already there being moved.
-
-           Reading from BEHIND the direction of travel (hence minus) is what drags the
-           pattern forward with the cursor. Reading from ahead would push it away,
-           which looks like a repelling force rather than something being stirred.
-
-           A squared falloff with COMPACT SUPPORT: it reaches exactly zero at the
-           radius rather than trailing off forever. That matters twice - the
-           disturbance has a definite edge instead of subtly warping the whole
-           picture, and every sample outside the radius skips the work entirely, so
-           the cost is paid near the cursor rather than across the grid. No square
-           root anywhere in here: the falloff needs only the squared distance. */
-        let px = colX;
-        let py = rowY;
-        if (flowing) {
-          const dx = colX - ringX;
-          const falloff = 1 - (dx * dx + dy2) * invR2;
-          if (falloff > 0) {
-            /* Smoothstep rather than the square this used to be, and the difference is
-               how magnetic the thing feels. A square peaks to a point directly under the
-               cursor, so the strongest displacement is concentrated at one spot and the
-               eye reads it as a grip. Smoothstep is flat at BOTH ends - a broad soft
-               plateau near the cursor easing to nothing at the rim - so a whole area
-               moves together and the shearing happens out in the surrounding ring, which
-               is where a liquid's motion actually shows. */
-            const weight = falloff * falloff * (3 - 2 * falloff);
-            px -= flowX * weight;
-            py -= flowY * weight;
-          }
-        }
-
-        /* And the wake on top. Each live impulse displaces the sample the same way the
-           live push does, so they simply add: where the trail crosses itself the
-           displacement accumulates, which is exactly what makes a stirred surface look
-           stirred rather than merely pushed. */
-        for (let n = 0; n < wakeRowCount; n++) {
-          const i = wakeRow[n];
-          const wdx = colX - wakeCX[i];
-          const wdy = rowY - wakeCY[i];
-          const falloff = 1 - (wdx * wdx + wdy * wdy) * wakeInvR2;
-          if (falloff > 0) {
-            const weight = falloff * falloff * (3 - 2 * falloff);
-            px -= wakePX[i] * weight;
-            py -= wakePY[i] * weight;
-          }
-        }
+        const px = (originX + col * CELL) * scale;
 
         field[index++] =
             Math.sin(px * 1.10 + a) * Math.cos(py * 0.90 - b)
@@ -764,67 +435,7 @@
 
   /* ------------------------------------------------------------------ loop */
 
-  /* Eases the drawn pointer position toward the real one.
-
-     Clamped the way progress.js clamps its frame delta and for the same reason:
-     requestAnimationFrame stops in a hidden tab, so coming back to one reports a gap
-     of seconds. Unclamped, that would teleport the landscape in a single frame. */
-  function easePointer(time) {
-    const dt = pointerLast ? Math.min(time - pointerLast, 100) : 16;
-    pointerLast = time;
-    const k = 1 - Math.exp(-dt / POINTER_EASE_MS);
-    pointerShownX += (pointerTargetX - pointerShownX) * k;
-    pointerShownY += (pointerTargetY - pointerShownY) * k;
-    pointerStrength += (pointerTargetStrength - pointerStrength) * k;
-
-    updateWake(dt);
-  }
-
-  /* Ages the wake and drops a new impulse once the cursor has moved far enough.
-
-     Ageing happens here rather than in the draw, because it must advance with elapsed
-     time like everything else - tying it to frames would make the wake outlive its
-     welcome on a slow display and vanish early on a fast one. */
-  function updateWake(dt) {
-    for (let i = 0; i < WAKE_MAX; i++) {
-      if (wakeAge[i] < WAKE_LIFE_MS) wakeAge[i] += dt;
-    }
-
-    // Nothing to shed while the effect is fading out or the cursor is absent.
-    if (pointerStrength < 0.15) return;
-
-    const moveX = pointerTargetX - wakeFromX;
-    const moveY = pointerTargetY - wakeFromY;
-    const moved = Math.sqrt(moveX * moveX + moveY * moveY);
-    if (moved < WAKE_SPACING) return;
-
-    /* Direction of travel, rotated to one side and then the other down the trail. The
-       vector is normalised first so an impulse's strength comes from its age alone -
-       otherwise a fast drag would drop the same number of impulses but each far
-       stronger, and the wake would surge rather than flow. */
-    const nx = moveX / moved;
-    const ny = moveY / moved;
-    const cos = Math.cos(WAKE_CURL);
-    const sin = Math.sin(WAKE_CURL) * wakeCurl;
-    wakeCurl = -wakeCurl;
-
-    wakeX[wakeNext] = pointerTargetX;
-    wakeY[wakeNext] = pointerTargetY;
-    wakeVX[wakeNext] = nx * cos - ny * sin;
-    wakeVY[wakeNext] = nx * sin + ny * cos;
-    wakeAge[wakeNext] = 0;
-    wakeNext = (wakeNext + 1) % WAKE_MAX;
-
-    /* Advanced by exactly the spacing along the direction travelled, not snapped to the
-       cursor. Snapping loses the remainder of a long jump, so a fast drag would leave
-       impulses spaced by however far the pointer happened to move between events
-       instead of evenly. */
-    wakeFromX += nx * WAKE_SPACING;
-    wakeFromY += ny * WAKE_SPACING;
-  }
-
   function tick(time) {
-    easePointer(time);
     draw(time);
     frame = requestAnimationFrame(tick);
   }
@@ -854,46 +465,6 @@
     if (pending) cancelAnimationFrame(pending);
     pending = requestAnimationFrame(() => { pending = null; start(); });
   });
-
-  /* Pointer tracking.
-
-     The listener does nothing but record two numbers - no drawing, no maths. That is
-     deliberate: pointermove fires far more often than the screen refreshes, and doing
-     work in it is the classic way to make a page feel heavy. The rAF loop is already
-     running, so it reads the latest position when it happens to need it, which is a
-     throttle that costs nothing.
-
-     pointermove rather than mousemove so a touch drag moves the landscape too.
-     `passive` says this never calls preventDefault, so scrolling is never held up
-     waiting for it. */
-  if (!still.matches) {
-    window.addEventListener('pointermove', event => {
-      pointerTargetX = event.clientX;
-      pointerTargetY = event.clientY;
-      pointerTargetStrength = 1;
-      if (!pointerLocated) {
-        /* First sighting: put the eased position AT the cursor. Without this the eased
-           position starts at the origin, so the gap to the cursor is enormous - and
-           since that gap IS the drag, the first frame would shove the landscape halfway
-           across the window. */
-        pointerShownX = pointerTargetX;
-        pointerShownY = pointerTargetY;
-        // Same reasoning for the wake: measured from the origin, the first movement
-        // would look like a jump of the whole window and shed a burst of impulses.
-        wakeFromX = pointerTargetX;
-        wakeFromY = pointerTargetY;
-        pointerLocated = true;
-      }
-    }, { passive: true });
-
-    /* Leaving the window fades the drag out rather than cutting it, so the lines finish
-       relaxing instead of stopping wherever they had got to. The position is left where
-       it was as it fades: returning to roughly the same place then picks up from there
-       rather than dragging the surface across the whole window on the way back. */
-    document.addEventListener('pointerleave', () => { pointerTargetStrength = 0; });
-    // A window that loses focus usually means the cursor is somewhere else entirely.
-    window.addEventListener('blur', () => { pointerTargetStrength = 0; });
-  }
 
   // Changing the OS motion setting takes effect without a reload.
   still.addEventListener('change', start);

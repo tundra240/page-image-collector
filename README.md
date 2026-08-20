@@ -210,23 +210,19 @@ The background is green topographic contour lines flowing behind the page: neste
 swell, split and merge as the landscape under them moves, with a scroll-linked drift so it feels
 attached to the content rather than pinned behind it.
 
-**Moving the cursor stirs it.** Drag the pointer across an empty part of the page and the
-contour lines near it are pulled along, then flow back once you stop — like drawing a finger
-through a liquid. Nothing is drawn under the cursor and no shape follows it around: the lines
-already there are simply displaced, over a wide soft area rather than gripped at a point. It also
-leaves a **wake**: the whole path you traced keeps moving and curling for a moment after the
-cursor has gone, rather than the disturbance vanishing the instant you stop. Hold still and it
-settles back to nothing, with no trace of it left at all.
-
 It holds 60 fps even while a scan is running, which took some care — a contour has to be *found*
 every frame rather than merely moved, so unlike the rest of the interface this one is drawn on a
-canvas rather than in CSS. It uses about 5% of a frame at 1080p, and the cursor tracking adds
-nothing measurable on top. The lines are stitched into continuous curves rather than drawn cell by
-cell, which is what keeps them smooth instead of faceted; the techniques were chosen by
-measurement rather than by eye, and `ARCHITECTURE.md` has the numbers.
+canvas rather than in CSS. It uses about 5% of a frame at 1080p. The lines are stitched into
+continuous curves rather than drawn cell by cell, which is what keeps them smooth instead of
+faceted; the techniques were chosen by measurement rather than by eye, and `ARCHITECTURE.md` has
+the numbers.
 
-If your system is set to reduce motion, all of it stops: the lines rest in a still composition,
-and the scroll drift and cursor tracking are both switched off.
+The background does not react to the mouse. It did for a while — the cursor dragged the lines
+around like a finger through liquid — and it was removed on purpose: a background that answers
+every mouse movement competes with the interface in front of it.
+
+If your system is set to reduce motion, all of it stops: the lines rest in a still composition
+and the scroll drift is switched off.
 
 ## Shipping it to Windows
 
