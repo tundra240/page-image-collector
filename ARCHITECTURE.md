@@ -299,6 +299,25 @@ activeTypes = Set()     // which content types are currently shown
   the class has to survive the frame that paints the new state or the transition starts anyway.
   Individual clicks still animate. `test/api.test.js` guards both halves, since losing either
   restores the jank without anything looking wrong in a screenshot.
+- **`public/guide.html` is the only documentation the interface links**, and it was written from
+  scratch rather than pointing at the documents in this repository. That is a deliberate constraint
+  from the author: the linked help must explain *using* the app and reveal nothing about how it is
+  built. This file, `GLOSSARY.md` and `WSL-COMPATIBILITY.md` all fail that test by design — they
+  exist for whoever maintains it.
+
+  `test/api.test.js` enforces the constraint rather than trusting it, failing if the guide names
+  any implementation term or links a `.md` file. That guard is there because the natural way to
+  answer a support question is to explain the mechanism behind it, and one helpful sentence would
+  undo the intent. It checks the HTML comments too, which are invisible on the page and perfectly
+  visible in view-source.
+
+  It lives in `public/` out of necessity as well as tidiness: that is the only directory
+  `express.static` serves and the only one in `pkg.assets`, so a link to anything outside it would
+  work in development and be a dead link in the packaged executable.
+
+  It reuses the home screen's step cards, which exposed a latent bug worth knowing about: the card
+  title rule was `.steps strong`, so it caught emphasis *inside* the paragraphs too and forced it
+  onto its own line, splitting sentences in half. It is now `.steps > li > strong`.
 - **The home screen** (`#home-panel`) is what fills the page before a scan: three step cards and
   a note on what cannot be captured. It exists because the page was one form on an empty
   background, which read as unfinished rather than minimal, and because pressing the title needed

@@ -782,12 +782,17 @@ button:disabled {
   border-radius: var(--pill);
   box-shadow: var(--glow-sm);
 }
-.steps strong {
+/* Direct child only. As `.steps strong` this also caught emphasis inside the
+   paragraphs, forcing it onto its own line and splitting sentences in half - visible
+   the moment guide.html reused these cards for prose rather than one-line summaries. */
+.steps > li > strong {
   display: block;
   margin-bottom: 6px;
   font-size: 0.98rem;
   color: var(--text);
 }
+/* Emphasis within the prose stays inline, and only takes the brighter colour. */
+.steps p strong { color: var(--text); }
 .steps p {
   margin: 0;
   font-size: 0.87rem;
@@ -814,6 +819,55 @@ button:disabled {
   color: var(--muted);
   /* Sits directly on the background like .intro does, so it carries its own halo. */
   text-shadow: 0 1px 3px rgba(5, 7, 9, 0.92);
+}
+
+/* ------------------------------------------------------------------- guide */
+
+/* guide.html reuses the home screen's cards and this stylesheet wholesale, so it needs
+   very little of its own - only the pieces that page has and the app does not. */
+
+/* The guide's steps are read rather than glanced at, so they run in one column at a
+   comfortable measure instead of three side by side. */
+.guide-steps {
+  grid-template-columns: 1fr;
+  max-width: 84ch;
+}
+.guide-steps p + p { margin-top: 9px; }
+
+.guide-h2 {
+  margin: 40px 0 14px;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(61, 220, 132, 0.3);
+}
+
+.guide-list {
+  max-width: 84ch;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.guide-list li + li { margin-top: 9px; }
+.guide-list strong { color: var(--text); }
+
+/* A definition list, because that is what a symptom-and-answer pair is. */
+.guide-faq {
+  max-width: 84ch;
+  margin: 0;
+}
+.guide-faq dt {
+  margin-top: 16px;
+  font-weight: 650;
+  color: var(--text);
+}
+.guide-faq dd {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.7;
 }
 
 /* ------------------------------------------------------------------ credit */

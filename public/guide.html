@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Guide — Page Image Collector</title><link rel="stylesheet" href="style.css">
+</head>
+<!-- A guide to USING the app, and deliberately nothing else.
+
+     Written from scratch rather than linking the project's own documents, which are
+     written for whoever maintains it and say a great deal the person merely running it
+     does not need. Everything on this page can be worked out by anybody using the app
+     for five minutes, which is the test applied to each line of it.
+
+     Kept in public/ because that is the only directory served, and the only one carried
+     into a packaged build - a link to anything outside it would work while developing
+     and be a dead link in the shipped app. -->
+<body>
+  <div id="contours" aria-hidden="true"><canvas id="contour-canvas"></canvas></div>
+  <main>
+    <h1><a id="home" href="index.html" title="Back to the app">Page Image Collector</a></h1>
+    <p class="intro">How to use it. To go back, click the title above.</p>
+
+    <section id="home-panel" aria-label="Guide">
+      <ol class="steps guide-steps">
+        <li>
+          <span class="step-n">1</span>
+          <strong>Give it a page address</strong>
+          <p>Type or paste the address of the page holding the pictures you want. The
+          <code>https://</code> part is optional — <code>example.com</code> is enough, and so is
+          <code>example.com/gallery</code> for one page within a site. Common slips in the
+          address are corrected for you, and once you pause typing, a line underneath shows
+          exactly which address will be used, so you can check it before starting.</p>
+          <p>Local addresses work too, such as <code>localhost:3000</code>.</p>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <strong>Decide how many to take</strong>
+          <p><strong>Image cap</strong> stops the scan once it has that many pictures. The default
+          of 500 suits almost every page. It is a safety limit rather than a target: pictures are
+          held in memory until you save them, so a very large cap on a very image-heavy page can
+          use a lot of it.</p>
+          <p>Tick <strong>Auto cap</strong> to take everything the page has instead. The true total
+          cannot be known in advance, because many pages only load pictures as you reach them —
+          so while it runs, the count is shown with a <code>~</code> to say it is still an estimate.
+          The final number is often a little lower, since some addresses turn out to be missing
+          files or not pictures at all.</p>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <strong>Press "Find images"</strong>
+          <p>A second browser window opens and scrolls down the page by itself. <strong>Let it
+          work</strong> — that scrolling is what makes pictures load on pages that only fetch them
+          as you scroll. It closes on its own when finished.</p>
+          <p>Long pages take a while: the scan pauses at every step to give the page time to
+          fetch the next set of pictures. The bar tracks how far down it has reached and how many
+          it has found.</p>
+        </li>
+        <li>
+          <span class="step-n">4</span>
+          <strong>Filter by file type</strong>
+          <p><strong>Show types</strong> lists one chip per format actually found, each with a
+          count — for example <em>WebP 12 · PNG 4 · JPEG 7</em>. Untick a format to hide it.
+          Hidden formats are excluded from saving as well, so you cannot accidentally save
+          something you filtered out.</p>
+        </li>
+        <li>
+          <span class="step-n">5</span>
+          <strong>Choose the ones you want</strong>
+          <p>Everything starts selected. Click anywhere on a picture to deselect it — it greys
+          out and fades, so what you are about to save is clear at a glance. Click it again to
+          bring it back.</p>
+          <p><strong>Select all</strong> and <strong>Select none</strong> act only on what is
+          currently visible, so a hidden format is left alone.</p>
+          <p>Hovering a picture also offers two small buttons: one opens it on its own in a new
+          tab, and <code>{}</code> shows where on the page it was found and how large it was
+          displayed.</p>
+        </li>
+        <li>
+          <span class="step-n">6</span>
+          <strong>Save them</strong>
+          <p>Press <strong>Save selected images…</strong> and choose a folder. The files are
+          written straight into it. Names are numbered by their position on the page —
+          <code>001-</code>, <code>002-</code> — and the file extension always matches what the
+          picture really is, which is not always what its address claimed.</p>
+          <p>Saving needs <strong>Chrome or Edge</strong>. Firefox and Safari have no way for a
+          page to write files into a folder you pick, so the button reports that instead.</p>
+        </li>
+      </ol>
+
+      <h2 class="guide-h2">Other things worth knowing</h2>
+      <ul class="guide-list">
+        <li><strong>Starting over.</strong> Click the title at the top of the app. It clears the
+        address and the results. Your cap and Auto cap settings are kept, since those are choices
+        for the next scan. It does nothing while a scan is running.</li>
+        <li><strong>Recent addresses.</strong> Pages you have scanned appear above the guide cards
+        on the app's home screen. Click one to put it back in the box. <strong>Clear</strong>
+        forgets them. They are the only thing remembered between uses, they never leave your
+        machine, and the pictures themselves are never written anywhere you did not choose.</li>
+        <li><strong>Everything is local.</strong> Nothing is uploaded, and no addresses or pictures
+        are sent anywhere. The app is only reachable from this computer.</li>
+      </ul>
+
+      <h2 class="guide-h2">If something goes wrong</h2>
+      <dl class="guide-faq">
+        <dt>It found no pictures on a page that clearly has them</dt>
+        <dd>Some pages draw their pictures rather than loading them as files. There is no file to
+        save in that case, so nothing can be collected. It is worth trying once more first, in
+        case the page was simply slow.</dd>
+
+        <dt>Fewer pictures than expected</dt>
+        <dd>The cap counts every format together, so a page heavy in one of them can reach the
+        limit before the others are reached. Raise the cap, or tick Auto cap.</dd>
+
+        <dt>"Image is no longer available"</dt>
+        <dd>Pictures are only held while the app stays open, and each new scan replaces the last
+        set. Run the scan again, then save without starting another scan in between.</dd>
+
+        <dt>"A scan is already running"</dt>
+        <dd>Only one scan happens at a time — possibly one started in another tab. Wait for it to
+        finish; the bar shows how far along it is.</dd>
+
+        <dt>The page took too long to load</dt>
+        <dd>Open the address in a normal tab first to check it works. If it loads but slowly, try
+        again — the time limit applies to each attempt, not to the total.</dd>
+
+        <dt>The app itself will not open</dt>
+        <dd>It only runs while its launcher is open. If you closed that window, start it again.</dd>
+      </dl>
+
+      <p class="panel-note">This guide covers using the app. It is not a description of how the
+      app is built.</p>
+    </section>
+
+    <footer id="credit"><a href="index.html">Back to the app</a> <span aria-hidden="true">·</span> Made by: <a href="https://github.com/tundra240" target="_blank" rel="noopener noreferrer">tundra240</a></footer>
+  </main><script src="contours.js"></script>
+</body></html>

@@ -258,6 +258,10 @@ Those addresses are the **only** thing kept between runs. They live in your brow
 `localStorage` on this machine, never leave it, and **Clear** beside the row removes them.
 Captured images are never written to disk; they stay in memory until you save them yourself.
 
+A **Guide** link sits at the foot of every page, alongside the credit. It explains how to use the
+app; it is not a description of how the app is built, and the project's own documents are
+deliberately not linked from the interface.
+
 The whole panel gives way to the results grid after a scan, and comes back when you click the
 title.
 

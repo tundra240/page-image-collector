@@ -166,6 +166,43 @@ test('the title is a real button that starts over', async () => {
   assert.match(body[0], /aria-disabled/, 'resetToHome must refuse to run during a scan');
 });
 
+test('the guide is served and linked from the app', async () => {
+  const response = await fetch(BASE + '/guide.html');
+  assert.equal(response.status, 200, 'guide.html should be served');
+  const html = await (await fetch(BASE + '/')).text();
+  const credit = html.match(/<footer id="credit">[\s\S]*?<\/footer>/);
+  assert.ok(credit && /href="guide\.html"/.test(credit[0]),
+    `the footer must link to the guide: ${credit && credit[0]}`);
+});
+
+test('the guide explains using the app, not how it is built', async () => {
+  /* The author's explicit requirement: the linked documentation must not describe the
+     implementation. The project's own ARCHITECTURE.md, GLOSSARY.md and
+     WSL-COMPATIBILITY.md all do, which is exactly why none of them is linked and this
+     page was written separately instead.
+
+     Guarded rather than trusted, because the natural way to answer a support question is
+     to explain the mechanism behind it, and one helpful sentence would undo the whole
+     intent. This also catches the subtler leak: an HTML comment is invisible on the page
+     and perfectly visible in view-source. */
+  const guide = await (await fetch(BASE + '/guide.html')).text();
+
+  const forbidden = [
+    'playwright', 'express', 'node_modules', 'marching squares', 'Float32',
+    'requestAnimationFrame', 'localStorage', 'IntersectionObserver', 'headless',
+    'domcontentloaded', 'File System Access', 'srcset', 'currentSrc', 'WSL',
+    'scan pipeline', 'domain warp', 'smoothstep', 'ARCHITECTURE.md', 'GLOSSARY.md'
+  ];
+  const found = forbidden.filter(term => guide.toLowerCase().includes(term.toLowerCase()));
+  assert.deepEqual(found, [],
+    `the guide must not name implementation details, found: ${found.join(', ')}`);
+
+  // And it must not simply point at the maintainer documentation either.
+  assert.ok(!/\.md\b/.test(guide), 'the guide must not link the project markdown documents');
+  // It should still actually be a guide.
+  assert.match(guide, /Find images/, 'the guide should cover the main action');
+});
+
 test('the credit link is present and opens safely', async () => {
   /* The only outbound link in the app, so the safety attributes are worth pinning.
      Without rel="noopener" a target="_blank" link hands the opened tab a handle back to
