@@ -303,6 +303,10 @@ title.
    each with a count, for example `WebP 12 · PNG 4 · JPEG 7`. Untick a type to hide it.
    Hidden types are excluded from saving, so you cannot accidentally save something you
    filtered out.
+
+   Each picture also has a **{}** button. It opens a panel showing where on the page that
+   picture came from — and **Show me on the page** reopens the page and highlights it in place,
+   which is the quickest way to tell two similar pictures apart.
 5. **Choose images.** Everything starts selected. Click a card anywhere to deselect it — it
    **greys out and fades**, so what you are about to save is obvious at a glance rather than
    needing you to read every tick box. Hovering a greyed-out card lifts it most of the way back,

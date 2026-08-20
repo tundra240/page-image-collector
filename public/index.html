@@ -75,7 +75,13 @@
     <dialog id="details" aria-labelledby="details-title">
       <div class="details-head"><strong id="details-title"></strong><button id="details-close" type="button" aria-label="Close" title="Close">×</button></div>
       <pre id="details-json" tabindex="0"></pre>
-      <div class="details-foot"><button id="details-copy" type="button">Copy</button></div>
+      <p id="details-status" role="status"></p>
+      <!-- Reveal first and autofocused, so opening this panel and pressing Enter goes
+           straight to the image on the page. Copy stays for the raw figures. -->
+      <div class="details-foot">
+        <button id="details-reveal" type="button" autofocus>Show me on the page</button>
+        <button id="details-copy" type="button" class="details-secondary">Copy</button>
+      </div>
     </dialog>
   </main><script src="errors.js"></script><script src="progress.js"></script><script src="app.js"></script><script src="contours.js"></script>
 </body></html>

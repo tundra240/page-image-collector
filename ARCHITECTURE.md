@@ -299,6 +299,41 @@ activeTypes = Set()     // which content types are currently shown
   the class has to survive the frame that paints the new state or the transition starts anyway.
   Individual clicks still animate. `test/api.test.js` guards both halves, since losing either
   restores the jank without anything looking wrong in a screenshot.
+- **"Show me on the page"** (`POST /api/reveal`) reopens the scanned page and highlights one
+  image in place. The `{}` panel used to only print figures; this is now its primary action.
+
+  It needs two things the scan response does not carry, so both are kept in module state: the
+  address the browser **ended** on (a site that redirects or bounces through a consent page would
+  otherwise send the reveal somewhere the image never was) and the **raw** measurements
+  (`describeLocation()` rounds a position into "43% down the page" — right for reading, useless
+  for scrolling to).
+
+  `lib/reveal-in-page.js` is the part that runs inside the reopened page, extracted for the same
+  reason as the other `lib/` modules: it holds real decisions and a function buried in a request
+  handler cannot be tested. It must stay self-contained, since Playwright injects its *source*
+  into the page and anything it closed over would be undefined there.
+
+  It finds the image three ways, in descending order of trustworthiness — **by URL** (exact, and
+  what matches almost always), **by the recorded DOM path** (approximately a CSS selector, but it
+  can match the wrong element on a page that has shifted), then **by recorded position** (only as
+  good as the page being unchanged, but "roughly here" beats "not found"). Which one succeeded is
+  returned, and the front end words the outcome differently for each — claiming it highlighted the
+  image when it only pointed at old coordinates would be exactly the kind of small lie that wastes
+  somebody's time. Element search is two passes: cheap selectors first, computed backgrounds
+  second, because the latter means visiting every element on the page.
+
+  The reveal window is deliberately **left open** — looking at it is the whole point — so the
+  module owns its lifetime, keeping one and closing the last when another opens or a scan starts.
+
+  Navigation target comes from the server's own record and the id is checked against the store, so
+  a crafted request cannot point it at a page of its choosing.
+
+  **This exposed a real bug.** The scan released its lock in a `finally` *after*
+  `await browser.close()`, so for the second or two a browser takes to close, the app still
+  believed a scan was running — and the front end, having just received its results, got
+  "A scan is already running" for whatever it did next. Which is precisely when somebody clicks an
+  image to see where it came from. The lock is now released before the cleanup; found by an
+  end-to-end test doing exactly that.
 - **`public/guide.html` is the only documentation the interface links**, and it was written from
   scratch rather than pointing at the documents in this repository. That is a deliberate constraint
   from the author: the linked help must explain *using* the app and reveal nothing about how it is

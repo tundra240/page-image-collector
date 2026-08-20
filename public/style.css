@@ -1258,7 +1258,34 @@ button:disabled {
   padding: 11px 15px;
   border-top: 1px solid var(--border);
 }
+.details-foot {
+  gap: 9px;
+  /* Reveal is the primary action, so it takes the left of the row and Copy sits beside
+     it. Both stay right-aligned as a pair. */
+  justify-content: flex-end;
+}
 .details-foot button { padding: 9px 18px; font-size: 0.84rem; }
+/* Copy is the secondary action now that Reveal is beside it, so it drops the green pill
+   for the same quiet treatment the toolbar's non-primary buttons use. */
+.details-secondary {
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+/* Outcome of a reveal. Hidden until there is something to say, so the panel does not
+   carry an empty line the rest of the time. */
+#details-status {
+  margin: 0;
+  padding: 0 15px 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+#details-status:empty { display: none; }
+#details-status.error { color: var(--danger); }
 
 #details-close {
   padding: 0;

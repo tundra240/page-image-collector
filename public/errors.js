@@ -131,6 +131,39 @@
       selfHeal: 'none'
     },
 
+    REVEAL_NOT_FOUND: {
+      code: 'REVEAL_NOT_FOUND',
+      where: 'server',
+      http: 404,
+      message: 'That image is not on the page any more, so there is nothing to point at.',
+      meaning: 'Showing an image in place means opening the page again — the scan\'s own browser '
+             + 'closed when it finished. The page loaded, but nothing on it now uses this image, '
+             + 'and the position recorded during the scan was not usable either.',
+      causes: [
+        'The page has changed since the scan',
+        'The image is one of a set that rotates on each visit, such as a banner or advert',
+        'The image only appears after signing in, or after something is clicked',
+        'It was never on the page as an element — some images are only ever network traffic'
+      ],
+      fix: 'Scan the page again so the positions match what is there now. If the image comes and '
+         + 'goes on each visit, it may simply not be present this time.',
+      selfHeal: 'none'
+    },
+
+    REVEAL_FAILED: {
+      code: 'REVEAL_FAILED',
+      where: 'server',
+      http: 500,
+      message: 'Could not open the page to show that image.',
+      meaning: 'The browser could not be launched, or the page could not be loaded a second '
+             + 'time. The underlying reason is appended to the message.',
+      causes: ['The site is slow or now unreachable', 'The page needs a sign-in that has expired',
+               'The browser was closed by hand while it was opening'],
+      fix: 'Check the page still loads in a normal tab. The image itself is unaffected — it is '
+         + 'already captured and can still be saved.',
+      selfHeal: 'retry'
+    },
+
     /* --------------------------------------------------------------- browser */
 
     SERVER_UNREACHABLE: {

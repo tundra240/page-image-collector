@@ -18,8 +18,35 @@ const BROWSER_LIB_DIR = path.join(APP_DIR, '.wsl-browser-libs', 'usr', 'lib', 'x
 const { resolveLimit, reportedLimit, DEFAULT_IMAGE_LIMIT, MAX_IMAGE_LIMIT } = require('./lib/scan-limits.js');
 const { uniqueCandidates } = require('./lib/declared.js');
 const { describeLocation } = require('./lib/image-location.js');
+const { revealInPage } = require('./lib/reveal-in-page.js');
 const imageStore = new Map();
 let currentScan = null;
+
+/* State kept so an image can be shown back on the page it came from.
+
+   The scan's own browser closes when the scan ends, so revealing an image means opening
+   the page again — which needs two things the response alone does not carry: the address
+   that was actually loaded, and the raw measurements of where each image sat.
+
+   The address has to be the one the browser ENDED on, not the one that was typed. A site
+   that redirects, canonicalises a trailing slash or bounces through a consent page would
+   otherwise send the reveal somewhere the image never was.
+
+   Raw measurements rather than the described ones: describeLocation() rounds a position
+   into "43% down the page", which is right for reading and useless for scrolling to. */
+let scannedPageUrl = null;
+const imageLocations = new Map();
+/* The browser opened by a reveal is deliberately LEFT open, since the whole point is for
+   somebody to look at it. That makes it this module's to close: one is kept, and opening
+   another closes the last, so repeated reveals cannot litter the desktop with windows. */
+let revealBrowser = null;
+
+async function closeRevealBrowser() {
+  if (!revealBrowser) return;
+  const browser = revealBrowser;
+  revealBrowser = null;
+  await browser.close().catch(() => {});
+}
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -235,6 +262,12 @@ app.post('/api/scan', express.json({ limit: '1mb' }), async (req, res) => {
     limit: reportedLimit({ autoCap, limit: imageLimit, detected: 0 })
   };
   imageStore.clear();
+  /* A reveal window still open is showing the previous scan's page, so it is stale the
+     moment a new scan starts. Closing it here also means only one automated window is
+     ever on screen at a time, which matters when the scan opens its own. */
+  imageLocations.clear();
+  scannedPageUrl = null;
+  await closeRevealBrowser();
   let browser;
   try {
     // Keep the automated page visible: it makes progress clear and avoids sites
@@ -386,17 +419,20 @@ app.post('/api/scan', express.json({ limit: '1mb' }), async (req, res) => {
     // URL. Running each raw key back through uniqueCandidates is what makes the two
     // agree — resolving by hand would miss the fragment stripping it does, and every
     // location for a src ending in "#top" would then silently fail to match.
-    const locationByUrl = new Map();
+    // Module-level rather than local, so /api/reveal can look an image back up later.
+    imageLocations.clear();
     for (const [raw, measured] of Object.entries(sweep.locations)) {
       const [url] = uniqueCandidates([raw], page.url());
-      if (url && !locationByUrl.has(url)) locationByUrl.set(url, measured);
+      if (url && !imageLocations.has(url)) imageLocations.set(url, measured);
     }
+    // The address the browser ended on, after any redirect.
+    scannedPageUrl = page.url();
     const items = [...imageStore.values()]
       .sort((a, b) => (pageOrder.get(a.url) ?? Number.MAX_SAFE_INTEGER) - (pageOrder.get(b.url) ?? Number.MAX_SAFE_INTEGER))
       .map((entry, index) => ({
       id: Buffer.from(entry.url).toString('base64url'), url: entry.url,
       name: uniqueName(entry.url, entry.contentType, index), type: entry.contentType, bytes: entry.body.length,
-      location: describeLocation(locationByUrl.get(entry.url), sweep.pageHeight)
+      location: describeLocation(imageLocations.get(entry.url), sweep.pageHeight)
       }));
     res.json({
       images: items, browser: path.basename(executablePath),
@@ -414,8 +450,18 @@ app.post('/api/scan', express.json({ limit: '1mb' }), async (req, res) => {
     else if (raw.includes('browsers.json')) fail(res, 'PKG_MISSING_BROWSERS_JSON');
     else fail(res, 'SCAN_FAILED', raw);
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    /* Lock released BEFORE the browser is closed, and the order is load-bearing.
+
+       Closing a browser takes a second or two, so with these the other way round the
+       scan held its lock for that long after the response had already been sent. The
+       front end, having just received its results, would get "A scan is already running"
+       for anything it did next — which is precisely when somebody clicks an image to see
+       where it came from. Found by doing exactly that in a test.
+
+       Nothing is lost by releasing early: by this point the work is finished and the
+       response is written, and the browser being closed is nobody else's concern. */
     currentScan = null;
+    if (browser) await browser.close().catch(() => {});
   }
 });
 
@@ -444,6 +490,59 @@ app.post('/api/self-heal/install-browser', async (req, res) => {
     res.json({ ok: true, browser: path.basename(findBrowser()) });
   } catch (error) {
     fail(res, 'SCAN_FAILED', `Chromium download failed: ${error.message}`);
+  }
+});
+
+/* Opens the scanned page again and points at one image.
+
+   Deliberately leaves the window open: being able to look at the image in context is the
+   entire feature, so closing it would defeat the point. closeRevealBrowser() owns the
+   lifetime instead. */
+app.post('/api/reveal', express.json({ limit: '16kb' }), async (req, res) => {
+  if (currentScan) return fail(res, 'SCAN_IN_PROGRESS');
+
+  const id = String(req.body?.id || '');
+  let imageUrl = '';
+  try { imageUrl = Buffer.from(id, 'base64url').toString(); } catch { /* handled below */ }
+  /* Checked against the store rather than trusted from the request. The address to
+     navigate to comes from the server's own record of the last scan, so a crafted request
+     cannot point this at a page of its choosing. */
+  if (!imageUrl || !imageStore.has(imageUrl) || !scannedPageUrl) return fail(res, 'IMAGE_EXPIRED');
+
+  const executablePath = findBrowser();
+  if (!executablePath) return fail(res, 'NO_BROWSER');
+
+  const measured = imageLocations.get(imageUrl) || {};
+  await closeRevealBrowser();
+
+  let browser;
+  try {
+    browser = await chromium.launch({ executablePath, headless: false, env: browserEnvironment() });
+    revealBrowser = browser;
+    // The same viewport the scan used, so the recorded positions describe the same layout.
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await page.goto(scannedPageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+    const outcome = await page.evaluate(revealInPage, {
+      imageUrl,
+      foundIn: measured.foundIn || null,
+      top: Number(measured.top) || 0,
+      left: Number(measured.left) || 0,
+      width: Number(measured.width) || 0,
+      height: Number(measured.height) || 0
+    });
+
+    if (!outcome || outcome.how === 'none') {
+      await closeRevealBrowser();
+      return fail(res, 'REVEAL_NOT_FOUND');
+    }
+    res.json({ ok: true, ...outcome, pageUrl: scannedPageUrl });
+  } catch (error) {
+    await closeRevealBrowser();
+    const raw = error.message || '';
+    if (raw.includes('Timeout')) return fail(res, 'PAGE_TIMEOUT');
+    if (/shared librar|libnss3|libnspr4|libasound/i.test(raw)) return fail(res, 'BROWSER_LIBS_MISSING');
+    return fail(res, 'REVEAL_FAILED', raw);
   }
 });
 

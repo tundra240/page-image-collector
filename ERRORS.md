@@ -20,6 +20,8 @@ may be reworded; **codes are the contract** and are what the app matches on.
 | [`PAGE_TIMEOUT`](#page-timeout) | server | 500 | Yes — `retry` |
 | [`SCAN_FAILED`](#scan-failed) | server | 500 | No — advice only |
 | [`IMAGE_EXPIRED`](#image-expired) | server | 404 | No — advice only |
+| [`REVEAL_NOT_FOUND`](#reveal-not-found) | server | 404 | No — advice only |
+| [`REVEAL_FAILED`](#reveal-failed) | server | 500 | Yes — `retry` |
 | [`SERVER_UNREACHABLE`](#server-unreachable) | browser | — | Yes — `restart-server` |
 | [`NOTHING_SELECTED`](#nothing-selected) | browser | — | No — advice only |
 | [`NO_DIRECTORY_PICKER`](#no-directory-picker) | browser | — | No — advice only |
@@ -172,6 +174,43 @@ Returned by the API as JSON: `{ error, code }`. The front end shows the message 
 **How to fix it.** Run the scan again. Results are deliberately not written to disk.
 
 **Automatic handling:** none — the app explains it and waits for you.
+
+### REVEAL_NOT_FOUND
+
+> That image is not on the page any more, so there is nothing to point at.
+
+**HTTP status:** `404`
+
+**What it means.** Showing an image in place means opening the page again — the scan's own browser closed when it finished. The page loaded, but nothing on it now uses this image, and the position recorded during the scan was not usable either.
+
+**Common causes**
+
+- The page has changed since the scan
+- The image is one of a set that rotates on each visit, such as a banner or advert
+- The image only appears after signing in, or after something is clicked
+- It was never on the page as an element — some images are only ever network traffic
+
+**How to fix it.** Scan the page again so the positions match what is there now. If the image comes and goes on each visit, it may simply not be present this time.
+
+**Automatic handling:** none — the app explains it and waits for you.
+
+### REVEAL_FAILED
+
+> Could not open the page to show that image.
+
+**HTTP status:** `500`
+
+**What it means.** The browser could not be launched, or the page could not be loaded a second time. The underlying reason is appended to the message.
+
+**Common causes**
+
+- The site is slow or now unreachable
+- The page needs a sign-in that has expired
+- The browser was closed by hand while it was opening
+
+**How to fix it.** Check the page still loads in a normal tab. The image itself is unaffected — it is already captured and can still be saved.
+
+**Automatic handling:** `retry`.
 
 ---
 

@@ -646,17 +646,73 @@ const detailsTitle = document.querySelector('#details-title');
 const detailsJson = document.querySelector('#details-json');
 const detailsCopy = document.querySelector('#details-copy');
 const detailsClose = document.querySelector('#details-close');
+const detailsReveal = document.querySelector('#details-reveal');
+const detailsStatus = document.querySelector('#details-status');
+/** Which image the panel is currently describing, so Reveal knows what to ask for. */
+let detailsImage = null;
 
 function showDetails(image) {
   // Guarded like #to-top below: a browser holding a cached older index.html has no
   // dialog to show, and throwing here would take the rest of this file down with it.
   if (!detailsDialog) return;
+  detailsImage = image;
   detailsTitle.textContent = image.name;
   detailsJson.textContent = JSON.stringify(locationReport(image), null, 2);
+  setDetailsStatus('');
+  if (detailsReveal) detailsReveal.disabled = false;
   detailsDialog.showModal();
 }
 
+function setDetailsStatus(text, error = false) {
+  if (!detailsStatus) return;
+  detailsStatus.textContent = text;
+  detailsStatus.classList.toggle('error', error);
+}
+
+/* What actually happened, in the user's terms rather than the server's.
+
+   Which of the three routes found the image matters, because it changes how much to
+   trust what is being pointed at. Reporting "highlighted it" when the server only
+   managed to point at coordinates on a page that has since changed would be a small
+   lie, and exactly the kind that wastes somebody's time. */
+const REVEAL_OUTCOMES = {
+  url: 'Opened the page and highlighted it.',
+  background: 'Opened the page and highlighted it — it is a CSS background there.',
+  path: 'Opened the page and highlighted the most likely match. It was found by its place in '
+      + 'the page rather than by its address, so check it is the right one.',
+  position: 'The page has changed since the scan, so nothing on it carries this image now. '
+          + 'Pointing at roughly where it used to be.'
+};
+
+async function revealOnPage() {
+  if (!detailsImage || !detailsReveal) return;
+  detailsReveal.disabled = true;
+  // Worth saying out loud: a browser has to start and the page has to load again, so
+  // several seconds of nothing happening is normal rather than broken.
+  setDetailsStatus('Opening the page…');
+
+  try {
+    const response = await fetch('/api/reveal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: detailsImage.id })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      // The catalogue's wording is better than anything invented here.
+      setDetailsStatus(data.error || lookup(data.code).message, true);
+      return;
+    }
+    setDetailsStatus(REVEAL_OUTCOMES[data.how] || 'Opened the page and highlighted it.');
+  } catch {
+    setDetailsStatus(lookup('SERVER_UNREACHABLE').message, true);
+  } finally {
+    detailsReveal.disabled = false;
+  }
+}
+
 if (detailsDialog) {
+  if (detailsReveal) detailsReveal.onclick = revealOnPage;
   detailsClose.onclick = () => detailsDialog.close();
   // Clicking the backdrop closes it. The dialog element itself covers the whole
   // viewport, so a click landing on it rather than on its contents is a backdrop click.

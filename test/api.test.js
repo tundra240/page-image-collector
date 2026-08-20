@@ -71,6 +71,53 @@ test('every error response carries both a message and a code', async () => {
   }
 });
 
+test('revealing an image from no scan reports IMAGE_EXPIRED', async () => {
+  /* The reveal navigates a browser, so where it navigates matters. The address comes from
+     the server's own record of the last scan and the id is checked against the store, so a
+     request cannot point it at a page of its choosing. With no scan behind it there is
+     nothing to reveal and nothing to navigate to. */
+  const id = Buffer.from('https://example.com/never-scanned.png').toString('base64url');
+  const response = await fetch(`${BASE}/api/reveal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  assert.equal(response.status, 404);
+  const body = await response.json();
+  assert.equal(body.code, 'IMAGE_EXPIRED');
+});
+
+test('a reveal with no id at all is refused, not crashed', async () => {
+  for (const payload of [{}, { id: '' }, { id: '!!!not-base64!!!' }]) {
+    const response = await fetch(`${BASE}/api/reveal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    assert.ok(response.status === 404, `${JSON.stringify(payload)} should be refused cleanly`);
+    const body = await response.json();
+    assert.ok(body.code in ERRORS, `unknown code ${body.code} for ${JSON.stringify(payload)}`);
+  }
+});
+
+test('the details panel offers to show the image on the page', async () => {
+  // The {} panel used to only print figures. Its primary action now goes and finds the
+  // image, and it is autofocused so opening the panel and pressing Enter is enough.
+  const html = await (await fetch(BASE + '/')).text();
+  const dialog = html.match(/<dialog id="details"[\s\S]*?<\/dialog>/);
+  assert.ok(dialog, 'index.html should contain the details dialog');
+  assert.match(dialog[0], /id="details-reveal"/, `the panel must offer a reveal action: ${dialog[0]}`);
+  assert.match(dialog[0], /autofocus/, 'the reveal action should be the panel\'s default');
+
+  const app = await (await fetch(BASE + '/app.js')).text();
+  assert.match(app, /'\/api\/reveal'/, 'app.js must call the reveal endpoint');
+  // Each of the three ways the server can find an image needs its own wording, because
+  // they differ in how much they can be trusted.
+  for (const how of ['url', 'background', 'path', 'position']) {
+    assert.ok(new RegExp(`\\b${how}:`).test(app), `app.js should explain the "${how}" outcome`);
+  }
+});
+
 test('the UI and the catalogue are both served to the browser', async () => {
   for (const asset of ['/', '/app.js', '/style.css', '/errors.js', '/progress.js', '/contours.js']) {
     const response = await fetch(BASE + asset);
