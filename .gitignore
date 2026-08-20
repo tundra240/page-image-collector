@@ -23,3 +23,7 @@ dist/
 # Claude Code session state and worktrees. Worktrees are separate checkouts of this
 # same repository, so committing one would nest the repo inside itself.
 .claude/
+
+# Editor workspace settings. VS Code writes a pytest config in here by itself, which
+# means nothing in a Node project and only confuses anyone reading the repository.
+.vscode/
