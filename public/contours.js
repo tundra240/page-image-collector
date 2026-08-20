@@ -63,13 +63,41 @@
    spots shorter. This converges, because it is fitting curves rather than shortening
    lines.
 
+   THE WAKE, AND WHY A SETTLE CURVE CANNOT JUDGE IT
+
+   The warp on its own is a function of where the cursor is now, so stopping made the
+   whole disturbance shrink away on the spot - there was nothing in the model that
+   remembered the cursor had ever been anywhere else. The wake fixes that by leaving a
+   trail of decaying impulses behind the pointer.
+
+   Judging it needed a different measurement, because "the disturbance lasts longer" is
+   ALSO what stickiness looks like, and a settle curve cannot tell the two apart. What
+   separates them is WHERE the leftover displacement is: clinging to the cursor, or lying
+   along the path it took. So the cursor is dragged left to right, stopped dead, and
+   three places are sampled:
+
+                            without the wake        with the wake
+     at the cursor  +200ms        18.3px                21.0px
+     at the START   +200ms         1.4px                12.0px
+     far away       +200ms          0.0px                 0.0px
+
+   The start of the drag is 400px behind where the cursor finished. Without the wake it
+   is already back at rest while the cursor's own patch is still fully displaced - one
+   blob, following the pointer. With it, the whole path is still moving and settles over
+   about 400ms, and the control is untouched either way, so it stays strictly local.
+
    WHAT THE POINTER COSTS
 
-   About 3%, which is inside the run-to-run spread. Three runs at 1920x1080, cursor
-   still against cursor moving on every single frame:
+   Three runs at 1920x1080, cursor still against cursor moving on every single frame:
 
-     cursor still    0.91  0.93  0.88 ms
-     cursor moving   0.95  0.93  0.94 ms
+     cursor still    0.90  0.91  0.90 ms
+     cursor moving   1.04  1.04  1.02 ms
+
+   The wake is most of that: 0.92ms before it existed, 1.03ms after, so it costs about
+   0.12ms - roughly 0.7% of a frame - for twelve impulses. It stays that cheap because
+   each row first works out which impulses are near enough to matter, so rows away from
+   the trail test none of them, and because the conversion of each impulse into field
+   units happens once per frame rather than once per sample.
 
    Measuring this correctly took a second attempt. Dispatching one pointer move and
    then timing 200 frames reported the feature as entirely free - but the drag is
@@ -208,6 +236,45 @@
      many milliseconds. Eased on ELAPSED TIME rather than per frame for exactly the
      reason set out there - a per-frame fraction silently runs faster on a 144Hz
      display, and every dropped frame becomes a visible hitch. */
+  /* ------------------------------------------------------------------ wake
+
+     The warp above is a function of where the cursor is NOW, and that is the ceiling on
+     how fluid it can feel. Stop moving and the whole disturbance shrinks away on the
+     spot, because there is nothing in the model that remembers the cursor was ever
+     anywhere else. Liquid does the opposite: the push outlives the thing that made it,
+     and what you actually watch is the wake settling after the finger has gone.
+
+     So the cursor now leaves a trail of small impulses behind it. Each is a miniature
+     version of the same warp - a position, a direction, and a strength that decays -
+     and the field is displaced by the live push plus every impulse still alive. The
+     visible result is a wake that trails the cursor and keeps moving after it stops. */
+
+  /** How many impulses are kept. A ring buffer, so the oldest is overwritten. */
+  const WAKE_MAX = 12;
+
+  /** How far the cursor must travel before another is dropped, in CSS pixels. Spacing
+      them by distance rather than by time keeps the wake even at any speed. */
+  const WAKE_SPACING = 26;
+
+  /** How long each impulse lasts. Longer than the live warp's settle, which is the
+      point: the wake is what is still moving once the cursor has stopped. */
+  const WAKE_LIFE_MS = 700;
+
+  /** Strength of a wake impulse against the live push. Below it on purpose - the wake
+      is a memory of the push, not a second one. */
+  const WAKE_FLOW = 0.5;
+
+  /** Reach of one impulse. Tighter than the live warp so the trail reads as a path
+      rather than one broad smear. */
+  const WAKE_RADIUS = 1.9;
+
+  /* Each impulse's push is rotated a little off the direction of travel, alternating
+     sign down the trail. That is what turns a straight drag into something that curls:
+     a real wake sheds vortices to alternating sides rather than trailing straight
+     behind. Cheap, too - the rotation happens once when the impulse is created, not per
+     sample. */
+  const WAKE_CURL = 0.55;
+
   /* How long the lines take to flow back once the cursor stops.
 
      This is the dial for "sticky". At 300ms the surface stayed displaced well after the
@@ -261,6 +328,33 @@
   /** Whether the cursor has ever been located, which is when there is a position to snap to. */
   let pointerLocated = false;
   let pointerLast = 0;
+
+  /* The wake, as parallel arrays rather than an array of objects. Allocated once for the
+     same reason every other buffer here is: this is read inside the per-sample loop, and
+     objects would mean chasing a pointer per impulse per sample. */
+  const wakeX = new Float32Array(WAKE_MAX);
+  const wakeY = new Float32Array(WAKE_MAX);
+  const wakeVX = new Float32Array(WAKE_MAX);
+  const wakeVY = new Float32Array(WAKE_MAX);
+  /** Age in ms. Anything at or past WAKE_LIFE_MS is dead, so this doubles as "empty". */
+  const wakeAge = new Float32Array(WAKE_MAX).fill(WAKE_LIFE_MS);
+  let wakeNext = 0;                 // ring buffer write position
+  let wakeCurl = 1;                 // flips per impulse, see WAKE_CURL
+  let wakeFromX = 0, wakeFromY = 0; // where the last impulse was dropped
+
+  /* Which impulses can affect the row being sampled. Rebuilt per row, which keeps the
+     per-sample loop down to the handful actually in range instead of all twelve. */
+  const wakeRow = new Int32Array(WAKE_MAX);
+  let wakeRowCount = 0;
+
+  /* Per-frame scratch: each live impulse's centre and push, already converted into field
+     units. Doing that conversion once per frame rather than once per sample is the
+     difference between twelve multiplies and forty thousand. */
+  const wakeCX = new Float32Array(WAKE_MAX);
+  const wakeCY = new Float32Array(WAKE_MAX);
+  const wakePX = new Float32Array(WAKE_MAX);
+  const wakePY = new Float32Array(WAKE_MAX);
+  const wakeAlive = new Int32Array(WAKE_MAX);
 
   /* ---------------------------------------------------------------- sizing */
 
@@ -354,11 +448,37 @@
        it has never entered the window. */
     const flowing = flow2 > 1e-8;
 
+    /* Wake impulses, converted once per frame into the same units as the samples.
+       WAKE_MAX is small and this is outside both loops, so it costs nothing. */
+    const wakeInvR2 = 1 / (WAKE_RADIUS * WAKE_RADIUS);
+    let wakeLive = 0;
+    for (let i = 0; i < WAKE_MAX; i++) {
+      if (wakeAge[i] >= WAKE_LIFE_MS) continue;
+      /* Squared decay rather than linear: an impulse should let go gently at the end,
+         and a linear fade stops with a visible kink as it reaches zero. */
+      const fade = 1 - wakeAge[i] / WAKE_LIFE_MS;
+      const push = WAKE_FLOW * fade * fade * pointerStrength * POINTER_FLOW_MAX;
+      wakeCX[i] = wakeX[i] * scale;
+      wakeCY[i] = wakeY[i] * scale + scroll;
+      wakePX[i] = wakeVX[i] * push;
+      wakePY[i] = wakeVY[i] * push;
+      wakeAlive[wakeLive++] = i;
+    }
+
     let index = 0;
     for (let row = 0; row <= rows; row++) {
       const rowY = (originY + row * CELL) * scale + scroll;
       const dy = rowY - ringY;
       const dy2 = dy * dy;
+
+      /* Which impulses this row can possibly touch. Without this the inner loop tests
+         every impulse for every sample; with it, a row far from the trail tests none. */
+      wakeRowCount = 0;
+      for (let n = 0; n < wakeLive; n++) {
+        const i = wakeAlive[n];
+        const d = rowY - wakeCY[i];
+        if (d * d < WAKE_RADIUS * WAKE_RADIUS) wakeRow[wakeRowCount++] = i;
+      }
 
       for (let col = 0; col <= cols; col++) {
         const colX = (originX + col * CELL) * scale;
@@ -393,6 +513,22 @@
             const weight = falloff * falloff * (3 - 2 * falloff);
             px -= flowX * weight;
             py -= flowY * weight;
+          }
+        }
+
+        /* And the wake on top. Each live impulse displaces the sample the same way the
+           live push does, so they simply add: where the trail crosses itself the
+           displacement accumulates, which is exactly what makes a stirred surface look
+           stirred rather than merely pushed. */
+        for (let n = 0; n < wakeRowCount; n++) {
+          const i = wakeRow[n];
+          const wdx = colX - wakeCX[i];
+          const wdy = rowY - wakeCY[i];
+          const falloff = 1 - (wdx * wdx + wdy * wdy) * wakeInvR2;
+          if (falloff > 0) {
+            const weight = falloff * falloff * (3 - 2 * falloff);
+            px -= wakePX[i] * weight;
+            py -= wakePY[i] * weight;
           }
         }
 
@@ -640,6 +776,51 @@
     pointerShownX += (pointerTargetX - pointerShownX) * k;
     pointerShownY += (pointerTargetY - pointerShownY) * k;
     pointerStrength += (pointerTargetStrength - pointerStrength) * k;
+
+    updateWake(dt);
+  }
+
+  /* Ages the wake and drops a new impulse once the cursor has moved far enough.
+
+     Ageing happens here rather than in the draw, because it must advance with elapsed
+     time like everything else - tying it to frames would make the wake outlive its
+     welcome on a slow display and vanish early on a fast one. */
+  function updateWake(dt) {
+    for (let i = 0; i < WAKE_MAX; i++) {
+      if (wakeAge[i] < WAKE_LIFE_MS) wakeAge[i] += dt;
+    }
+
+    // Nothing to shed while the effect is fading out or the cursor is absent.
+    if (pointerStrength < 0.15) return;
+
+    const moveX = pointerTargetX - wakeFromX;
+    const moveY = pointerTargetY - wakeFromY;
+    const moved = Math.sqrt(moveX * moveX + moveY * moveY);
+    if (moved < WAKE_SPACING) return;
+
+    /* Direction of travel, rotated to one side and then the other down the trail. The
+       vector is normalised first so an impulse's strength comes from its age alone -
+       otherwise a fast drag would drop the same number of impulses but each far
+       stronger, and the wake would surge rather than flow. */
+    const nx = moveX / moved;
+    const ny = moveY / moved;
+    const cos = Math.cos(WAKE_CURL);
+    const sin = Math.sin(WAKE_CURL) * wakeCurl;
+    wakeCurl = -wakeCurl;
+
+    wakeX[wakeNext] = pointerTargetX;
+    wakeY[wakeNext] = pointerTargetY;
+    wakeVX[wakeNext] = nx * cos - ny * sin;
+    wakeVY[wakeNext] = nx * sin + ny * cos;
+    wakeAge[wakeNext] = 0;
+    wakeNext = (wakeNext + 1) % WAKE_MAX;
+
+    /* Advanced by exactly the spacing along the direction travelled, not snapped to the
+       cursor. Snapping loses the remainder of a long jump, so a fast drag would leave
+       impulses spaced by however far the pointer happened to move between events
+       instead of evenly. */
+    wakeFromX += nx * WAKE_SPACING;
+    wakeFromY += ny * WAKE_SPACING;
   }
 
   function tick(time) {
@@ -697,6 +878,10 @@
            across the window. */
         pointerShownX = pointerTargetX;
         pointerShownY = pointerTargetY;
+        // Same reasoning for the wake: measured from the origin, the first movement
+        // would look like a jump of the whole window and shed a burst of impulses.
+        wakeFromX = pointerTargetX;
+        wakeFromY = pointerTargetY;
         pointerLocated = true;
       }
     }, { passive: true });

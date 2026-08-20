@@ -308,6 +308,31 @@ activeTypes = Set()     // which content types are currently shown
   are 2px or 60px out of place. Distance to the nearest line in the undisturbed frame is what
   actually measures a displacement.
 
+  **The cursor also leaves a wake.** The warp alone is a function of where the pointer is *now*,
+  so stopping made the disturbance shrink away on the spot — nothing in the model remembered the
+  cursor had been anywhere else. It now sheds a trail of decaying impulses, each a miniature of
+  the same warp, rotated alternately to either side so a straight drag curls the way a real wake
+  sheds to alternating sides.
+
+  Judging this needed a *different* measurement, because "the disturbance lasts longer" is also
+  exactly what stickiness looks like — a settle curve cannot separate them. What does is **where**
+  the leftover displacement sits. Dragging left to right, stopping dead, and sampling three places:
+
+  | 200 ms after stopping | Without wake | With wake |
+  |---|---|---|
+  | At the cursor | 18.3px | 21.0px |
+  | At the drag's start, 400px behind | **1.4px** | **12.0px** |
+  | Far away (control) | 0.0px | 0.0px |
+
+  Without it the start of the drag is already at rest while the cursor's own patch is fully
+  displaced — one blob following the pointer. With it, the whole path is still moving and settles
+  over ~400ms, and the control is untouched either way, so it stays strictly local.
+
+  It costs ~0.12ms (0.92 → 1.03ms with the cursor moving every frame) for twelve impulses. Each
+  row first works out which impulses are near enough to matter, so rows away from the trail test
+  none of them, and each impulse is converted into field units once per frame rather than once per
+  sample.
+
   It costs about **3%** (0.88–0.93 ms still, 0.93–0.95 ms with the cursor moving every frame),
   inside the run-to-run spread. Timing this needed a second attempt: dispatching one pointer move
   reported it as entirely free, because the lag closes after a single frame and the warp switches
