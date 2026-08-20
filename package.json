@@ -1,0 +1,30 @@
+{
+  "name": "page-image-collector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local website image collector",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build:win": "pkg . --targets node22-win-x64 --no-bytecode --public --public-packages \"*\" --output dist/PageImageCollector.exe",
+    "build:linux": "pkg . --targets node22-linux-x64 --no-bytecode --public --public-packages \"*\" --output dist/pagecollector-linux",
+    "test": "node --test",
+    "docs:errors": "node scripts/generate-errors-doc.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "playwright-core": "^1.52.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.22.0"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "node_modules/playwright-core/browsers.json",
+      "node_modules/playwright-core/package.json"
+    ],
+    "scripts": []
+  },
+  "bin": "server.js"
+}

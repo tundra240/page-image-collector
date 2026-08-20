@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Page Image Collector</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Purely decorative, so hidden from screen readers and never focusable. Sits
+       behind everything via z-index and takes no pointer events. The wrapper carries
+       the base tint and the vignette; the canvas inside it draws the contour lines.
+       A canvas cannot host ::before/::after, which is why the layer is still a div. -->
+  <div id="contours" aria-hidden="true"><canvas id="contour-canvas"></canvas></div>
+  <main>
+    <!-- The heading doubles as "start over". A real <button> inside the <h1> rather than
+         a click handler on the heading itself: that way Enter and Space, focus handling
+         and the button role all come from the platform, and the heading stays a heading. -->
+    <h1><button id="home" type="button" title="Start over — clears the address and the results">Page Image Collector</button></h1>
+    <p class="intro">Paste a page address. The app visibly scrolls through it, gathers the images that load, then lets you filter by type and save the ones you want.</p>
+    <form id="scan-form"><input id="url" type="text" inputmode="url" spellcheck="false" placeholder="example.com or www.example.com/gallery" required autocomplete="url" aria-describedby="url-preview"><label class="cap-label">Image cap <input id="limit" type="number" min="1" max="5000" value="500" required></label><label class="auto-cap" title="Take every image the page has, instead of stopping at a fixed number"><input id="auto-cap" type="checkbox"> Auto cap</label><button id="scan" type="submit">Find images</button></form>
+    <p id="url-preview" aria-live="polite" hidden></p>
+    <p id="status" role="status"></p>
+    <div id="hint" role="region" aria-label="How to fix this" hidden></div>
+    <div id="progress-wrap" hidden aria-label="Scan progress"><div id="progress-bar"></div></div>
+    <!-- The home screen proper: what fills the page before a scan, and what comes back
+         when you press the title. Hidden while a scan runs and once there are results,
+         so it never competes with the grid. -->
+    <section id="home-panel" aria-label="Getting started">
+      <!-- Populated from localStorage by app.js, and hidden entirely when there is no
+           history yet - an empty "Recent" heading is worse than no heading. -->
+      <div id="recent-row" hidden>
+        <span class="panel-label">Recent</span>
+        <div id="recent"></div>
+        <button id="recent-clear" type="button" class="ghost" title="Forget the addresses stored on this machine">Clear</button>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <span class="step-n">1</span>
+          <strong>Give it an address</strong>
+          <p>The scheme is optional — <code>example.com</code> works. A line under the box shows what will actually be used.</p>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <strong>It scrolls the page for you</strong>
+          <p>A second window opens and scrolls to the bottom. That is what makes lazy-loaded images appear, so let it work.</p>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <strong>Filter, then save</strong>
+          <p>Untick a format to hide it, click a card to deselect it, then write the rest straight into a folder you choose.</p>
+        </li>
+      </ol>
+
+      <p class="panel-note">
+        Everything stays on this machine — nothing is uploaded, and captured images are held in
+        memory only until you save them. Images drawn to a <code>&lt;canvas&gt;</code> or generated
+        by CSS cannot be captured as files, so a page can show pictures this finds nothing for.
+      </p>
+    </section>
+    <section id="results" hidden>
+      <div id="filters" class="filters"></div>
+      <div class="toolbar"><span id="count"></span><button id="all" type="button">Select all</button><button id="none" type="button">Select none</button><button id="save" type="button">Save selected images…</button></div>
+      <div id="grid"></div>
+    </section>
+    <button id="to-top" type="button" aria-label="Back to top" title="Back to top">↑</button>
+    <dialog id="details" aria-labelledby="details-title">
+      <div class="details-head"><strong id="details-title"></strong><button id="details-close" type="button" aria-label="Close" title="Close">×</button></div>
+      <pre id="details-json" tabindex="0"></pre>
+      <div class="details-foot"><button id="details-copy" type="button">Copy</button></div>
+    </dialog>
+  </main><script src="errors.js"></script><script src="progress.js"></script><script src="app.js"></script><script src="contours.js"></script>
+</body></html>
