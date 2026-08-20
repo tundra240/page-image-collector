@@ -895,6 +895,20 @@ button:disabled {
   text-decoration-color: var(--green-hi);
 }
 #credit a:focus-visible { outline: 2px solid var(--green-hi); outline-offset: 3px; }
+/* The footer holds two lines now, so its paragraphs carry the spacing rather than the
+   footer's own margin - otherwise the browser's default paragraph margins open a gap
+   between them that reads as two separate footers. */
+#credit p { margin: 0; }
+.thanks {
+  margin-top: 5px;
+  font-size: 0.79rem;
+  /* A step quieter than the byline above it, but still --muted rather than --faint,
+     which measures 4.02:1 and is under the minimum. The opacity is counted in that:
+     --muted is 7.47:1 alone and 5.92:1 once composited at 0.88, so it still clears
+     4.5:1 - an acknowledgement nobody can read is not much of an acknowledgement. */
+  color: var(--muted);
+  opacity: 0.88;
+}
 
 #grid {
   display: grid;

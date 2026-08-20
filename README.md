@@ -350,6 +350,14 @@ Safari do not have it.
 
 ---
 
+## Acknowledgements
+
+With thanks to **Keenu** and **Zain** at Mintel.
+
+Made by [tundra240](https://github.com/tundra240).
+
+---
+
 ## Developer notes
 
 ```bash

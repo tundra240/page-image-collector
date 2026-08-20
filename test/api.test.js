@@ -218,6 +218,20 @@ test('the credit link is present and opens safely', async () => {
     `an external target="_blank" link needs rel="noopener noreferrer": ${credit[0]}`);
 });
 
+test('the acknowledgement appears on every page', async () => {
+  /* Credit to a person is not the sort of thing to lose quietly in a later tidy-up of
+     the footer, so both names are pinned, on both pages. */
+  for (const page of ['/', '/guide.html']) {
+    const html = await (await fetch(BASE + page)).text();
+    const credit = html.match(/<footer id="credit">[\s\S]*?<\/footer>/);
+    assert.ok(credit, `${page} should have the credit footer`);
+    for (const name of ['Keenu', 'Zain', 'Mintel']) {
+      assert.ok(credit[0].includes(name),
+        `${page} footer must acknowledge ${name}: ${credit[0]}`);
+    }
+  }
+});
+
 test('the home screen has something on it before a scan', async () => {
   const html = await (await fetch(BASE + '/')).text();
   assert.ok(html.includes('id="home-panel"'), 'index.html must contain the home panel');
