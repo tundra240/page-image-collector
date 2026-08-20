@@ -504,10 +504,32 @@ A visible browser also needs a display; under WSL that means **WSLg**.
 
 ## 12. Packaging
 
-Two shipping formats, both built from WSL:
+**Single-file executable** — `./package-windows.sh` → `dist/PageImageCollector.exe` (63 MB) plus a
+22 MB zip. One file containing the Node runtime, the app, `node_modules` and the front-end.
+Nothing to install on the target machine.
 
-**Single-file executable** — `./package-windows.sh` → `dist/PageImageCollector.exe`. One file
-containing the Node runtime, the app, `node_modules` and the front-end. Nothing to install.
+It now builds on **WSL, Linux, or Windows under Git Bash**. It used to be WSL-only in practice,
+because the patch and zip steps were Python: on Windows `python3` is usually a Microsoft Store
+stub that sits on `PATH` and refuses to run, so `command -v python3` succeeds and the build dies
+on its first step. Both steps are Node now, which this project needs anyway. The zip step tries
+`zip`, then `Compress-Archive`, then bsdtar, and reports rather than failing the build if none is
+present — no single tool exists everywhere, and the exe is the deliverable.
+
+**The verification step matters more than it looks, and had gone stale.** It checks one string per
+feature that lives in an *asset* rather than in `server.js`, because assets arrive through pkg
+configuration: a file added to `public/` and never listed would vanish silently and only fail once
+the app was running somewhere without the source beside it. It was still checking for
+`slime-drift` — deleted with the slime background — so the guard would have failed the build for
+the wrong reason while genuinely new assets (the guide page, the contour canvas, the reveal
+action, the version-gap error) went unchecked. It now covers 19 strings across `index.html`,
+`app.js`, `progress.js`, `errors.js`, `contours.js`, the stylesheet, `guide.html` and `lib/`, and
+verifies the PE header by reading it rather than by matching the output of `file`.
+
+**String checks alone are not enough**, which is why the build is also exercised: the exe is
+started, its seven front-end assets fetched, an error path checked for a code, a real page
+scanned, and an image revealed. That last one matters most — every failure mode below shows up
+only when a `page.evaluate` actually runs, and `revealInPage` is the one whose function is
+`require`d from `lib/` rather than written inline, so it is the likeliest to be mangled.
 
 Three non-obvious problems had to be solved, each found by building the same bundle for Linux
 and running it locally:

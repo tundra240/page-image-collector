@@ -126,15 +126,22 @@ The app looks for `/usr/bin/google-chrome`, `/usr/bin/google-chrome-stable`,
 Double-click **`PageImageCollector.exe`**. A console window opens, then a browser at
 `http://127.0.0.1:3719`. Closing the console stops the app.
 
-Build it from a WSL checkout with:
+Build it with:
 
 ```bash
-./package-windows.sh
+./package-windows.sh          # WSL, Linux, or Windows under Git Bash
 ```
 
-That produces `dist/PageImageCollector.exe` (~63MB) and a smaller zip alongside it. The exe
-contains the Node runtime, the app and the front-end, so nothing needs installing on the
-target machine.
+That produces `dist/PageImageCollector.exe` (63 MB) and `dist/PageImageCollector-windows.zip`
+(22 MB, the exe plus a short README) alongside it. The exe contains the Node runtime, the app,
+`node_modules` and the front-end, so **nothing needs installing on the target machine** — no
+Node.js, no dependencies. Scanning uses the machine's own Chrome or Edge, and Edge ships with
+Windows.
+
+It used to require running from a WSL checkout, because the patch and zip steps were written in
+Python. They are in Node now, so it also builds on Windows — where `python3` is typically a
+Microsoft Store stub that sits on `PATH` and then refuses to run, which made the old script fail
+on its first step.
 
 **Two warnings you may hit:**
 
