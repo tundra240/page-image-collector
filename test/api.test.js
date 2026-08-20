@@ -362,6 +362,27 @@ test('the credit link is present and opens safely', async () => {
     `an external target="_blank" link needs rel="noopener noreferrer": ${credit[0]}`);
 });
 
+test('both pages credit the same person, by the same name', async () => {
+  /* These drifted apart: the name was updated on the front page and not in the guide, so
+     the app credited two different people depending on which page you were looking at.
+
+     Note the displayed name and the URL differ deliberately — the account that exists is
+     tundra240, and github.com/Nofo2000 returns 404, so linking the displayed name would
+     ship a dead link inside an executable. Checked against GitHub rather than assumed.
+     This asserts the pair is consistent, not that they match each other. */
+  const names = {};
+  for (const page of ['/', '/guide.html']) {
+    const html = await (await fetch(BASE + page)).text();
+    const credit = html.match(/Made by:\s*<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/);
+    assert.ok(credit, `${page} should have a "Made by" credit`);
+    names[page] = { url: credit[1], shown: credit[2].trim() };
+  }
+  assert.equal(names['/'].shown, names['/guide.html'].shown,
+    `the two pages show different names: "${names['/'].shown}" vs "${names['/guide.html'].shown}"`);
+  assert.equal(names['/'].url, names['/guide.html'].url,
+    'the two pages link to different places');
+});
+
 test('the acknowledgement appears on every page', async () => {
   /* Credit to a person is not the sort of thing to lose quietly in a later tidy-up of
      the footer, so both names are pinned, on both pages. */

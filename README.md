@@ -365,7 +365,7 @@ Safari do not have it.
 
 With thanks to **Keenu** and **Zain** at Mintel.
 
-Made by [tundra240](https://github.com/tundra240).
+Made by [Nofo2000](https://github.com/tundra240).
 
 ---
 
