@@ -599,13 +599,35 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   else console.log('Open the address above in a browser after installing Chrome or Edge.');
 });
 
+/* Exits, but leaves a fatal message readable first.
+
+   Double-clicking the packaged .exe gives it its OWN console window, and Windows closes
+   that window the instant the process ends. So a startup failure was on screen for a few
+   milliseconds and the app simply "did not work" — no message, no clue, nothing to
+   search for. This was reported exactly that way, and the cause turned out to be an
+   older copy still holding the port: the diagnosis had been printed perfectly and then
+   thrown away.
+
+   Only when stdin is a terminal. Under a test harness, a launcher script or CI there is
+   nobody to press a key, and hanging forever would be a worse failure than exiting. */
+function exitAfterMessage(code) {
+  if (!process.stdin.isTTY) process.exit(code);
+  console.error('Press any key to close this window.');
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.once('data', () => process.exit(code));
+}
+
 server.on('error', error => {
   // The default here is an unhandled 'error' event and a stack trace, which buries
   // the one thing worth saying.
   if (error.code === 'EADDRINUSE') {
     const entry = lookup('PORT_IN_USE');
     console.error(`\n${entry.message}\n\n${entry.fix}\n`);
-    process.exit(1);
+    return exitAfterMessage(1);
   }
-  throw error;
+  /* Anything else is unexpected, and throwing here would print a stack trace into a
+     window that is about to vanish. Say what happened, keep it on screen, then leave. */
+  console.error(`\n${lookup('SERVER_ERROR').message}\n\n${error && error.message}\n`);
+  return exitAfterMessage(1);
 });

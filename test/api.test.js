@@ -138,6 +138,36 @@ test('every error response carries both a message and a code', async () => {
   }
 });
 
+test('a second copy refuses the port instead of dying obscurely', async () => {
+  /* The commonest reason the packaged .exe appears not to work at all: an earlier copy is
+     still holding the port, so the new one exits immediately — and a double-clicked exe
+     gets its own console window, which closes with it. The message is on screen for
+     milliseconds.
+
+     This asserts the diagnosis is at least correct and complete before it vanishes: the
+     right message, the advice, and a non-zero exit. Keeping the window open is handled
+     separately, and only when stdin is a terminal — under this harness stdin is a pipe,
+     so it must still exit rather than wait for a keypress that will never come. */
+  const second = spawn(process.execPath, ['server.js'], {
+    cwd: root,
+    env: { ...process.env, PORT: String(PORT), PIC_NO_OPEN: '1' }
+  });
+  let output = '';
+  second.stdout.on('data', d => { output += d.toString(); });
+  second.stderr.on('data', d => { output += d.toString(); });
+
+  const code = await new Promise((resolve, reject) => {
+    second.on('exit', resolve);
+    setTimeout(() => { second.kill('SIGKILL'); reject(new Error('it hung instead of exiting: ' + output)); }, 12000);
+  });
+
+  assert.equal(code, 1, `a port clash should exit 1, got ${code}. Output: ${output}`);
+  assert.ok(output.includes(ERRORS.PORT_IN_USE.message),
+    `the message should be the catalogue's: ${output}`);
+  assert.ok(output.includes('3719') || output.includes(String(PORT)) || /port/i.test(output),
+    `it should say which port: ${output}`);
+});
+
 test('revealing an image from no scan reports IMAGE_EXPIRED', async () => {
   /* The reveal navigates a browser, so where it navigates matters. The address comes from
      the server's own record of the last scan and the id is checked against the store, so a

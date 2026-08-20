@@ -418,10 +418,11 @@ Printed to the terminal when the server starts, or when it tries to launch a bro
 
 **Common causes**
 
-- The app is already running
+- The app is already running — look for another console window, and close it
 - A previous run did not shut down cleanly
+- An older copy is running while a newer one is being started
 
-**How to fix it.** Find the process and stop it: ss -ltnp | grep 3719 then kill <pid>. Identify it by port, not by name — pkill -f "node server.js" also matches the shell you type it in.
+**How to fix it.** Close the other console window running the app — that is usually all it takes. On Windows, to find it: PowerShell, then Get-NetTCPConnection -LocalPort 3719 | Select-Object OwningProcess, and taskkill /PID <pid> to stop it. On Linux or macOS: ss -ltnp | grep 3719 (or lsof -i :3719) then kill <pid>. Identify it by port rather than by name — pkill -f "node server.js" also matches the shell you type it in.
 
 **Automatic handling:** none — the app explains it and waits for you.
 

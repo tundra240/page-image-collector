@@ -335,9 +335,18 @@
       message: 'Port 3719 is already in use.',
       meaning: 'The port is hard-coded, so only one copy of the app can run at a time. Node reports '
              + 'this as EADDRINUSE.',
-      causes: ['The app is already running', 'A previous run did not shut down cleanly'],
-      fix: 'Find the process and stop it: ss -ltnp | grep 3719 then kill <pid>. Identify it by port, '
-         + 'not by name — pkill -f "node server.js" also matches the shell you type it in.',
+      causes: ['The app is already running — look for another console window, and close it',
+               'A previous run did not shut down cleanly',
+               'An older copy is running while a newer one is being started'],
+      /* Windows first, because the single-file executable is built for Windows and this is
+         the likeliest message to greet somebody double-clicking it. The advice used to be
+         Linux-only, which was no use at all on the platform it shipped to. */
+      fix: 'Close the other console window running the app — that is usually all it takes. '
+         + 'On Windows, to find it: PowerShell, then '
+         + 'Get-NetTCPConnection -LocalPort 3719 | Select-Object OwningProcess, and '
+         + 'taskkill /PID <pid> to stop it. On Linux or macOS: ss -ltnp | grep 3719 (or '
+         + 'lsof -i :3719) then kill <pid>. Identify it by port rather than by name — '
+         + 'pkill -f "node server.js" also matches the shell you type it in.',
       selfHeal: 'none'
     },
 

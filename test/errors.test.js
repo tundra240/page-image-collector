@@ -122,6 +122,20 @@ test('a response with no code is recognised as a version mismatch, not as UNKNOW
   assert.ok(/restart/i.test(entry.fix), 'the fix should say to restart the app');
 });
 
+test('the port-clash advice works on the platform the app is shipped for', () => {
+  /* This is the message somebody sees when the packaged .exe will not start, and it is
+     the commonest reason it will not: an earlier copy still holding the port.
+
+     It used to offer only `ss -ltnp | grep 3719` and `pkill`, which are Linux commands.
+     The single-file executable is built FOR Windows, where neither exists - so the one
+     error most likely to greet a Windows user came with advice they could not follow. */
+  const fix = lookup('PORT_IN_USE').fix;
+  assert.match(fix, /Get-NetTCPConnection|taskkill|PowerShell/,
+    'PORT_IN_USE must tell a Windows user how to find the process holding the port');
+  assert.match(fix, /ss -ltnp|lsof|kill/,
+    'and must keep the Unix instructions, since the app runs there too');
+});
+
 test('isRetryable marks only the errors worth retrying automatically', () => {
   assert.equal(isRetryable('SCAN_IN_PROGRESS'), true);
   assert.equal(isRetryable('INVALID_URL'), false);
