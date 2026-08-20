@@ -264,6 +264,27 @@
       selfHeal: 'restart-server'
     },
 
+    SERVER_OUTDATED: {
+      code: 'SERVER_OUTDATED',
+      where: 'browser',
+      message: 'The app needs restarting: this page and the server behind it are different versions.',
+      meaning: 'The server answered without an error code, which means the answer did not come '
+             + 'from a part of this app that knows the contract. Almost always that is a version '
+             + 'gap: static files are read from disk on every request, so a running app serves '
+             + 'the CURRENT page and script — but its endpoints were fixed when the process '
+             + 'started. An app left running across an update therefore hands the browser a '
+             + 'front end that calls endpoints its own server has never heard of.',
+      causes: [
+        'The app was updated while it was running, and has not been restarted since',
+        'A button exists on the page for a feature the running server does not have yet',
+        'Something other than this app is answering on the port'
+      ],
+      fix: 'Restart the app: close the launcher window (or press Ctrl+C in it), start it again, '
+         + 'then reload the page with Ctrl+Shift+R. Nothing is lost by restarting — captured '
+         + 'images were only ever held in memory.',
+      selfHeal: 'restart-server'
+    },
+
     NOTHING_SELECTED: {
       code: 'NOTHING_SELECTED',
       where: 'browser',
@@ -516,5 +537,26 @@
     return lookup(code).selfHeal === 'retry';
   }
 
-  return { ERRORS, lookup, repairUrl, isRetryable, isLocalHostname };
+  /**
+   * Which code a failed API response represents.
+   *
+   * Every failure the server knows about goes through fail(), which always attaches a
+   * code. So a response WITHOUT one did not come from a handler that knows this app's
+   * contract — and the likeliest reason by far is that the two halves are different
+   * versions, since a running app serves the current page from disk while its endpoints
+   * stay as they were when the process started.
+   *
+   * That inference is the whole point. Falling back to UNKNOWN here produced "Something
+   * went wrong" with no advice, for a problem that a restart fixes completely.
+   *
+   * @param {unknown} payload the parsed JSON body, or an empty object if it did not parse
+   * @returns {string} a catalogue code, never empty
+   */
+  function responseCode(payload) {
+    const code = payload && payload.code;
+    if (typeof code === 'string' && code) return code;
+    return 'SERVER_OUTDATED';
+  }
+
+  return { ERRORS, lookup, repairUrl, isRetryable, isLocalHostname, responseCode };
 });

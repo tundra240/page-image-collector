@@ -86,6 +86,42 @@ test('repairUrl tolerates a mistyped scheme', () => {
   assert.equal(repairUrl('httpsite.com'), 'https://httpsite.com/');
 });
 
+test('a response with no code is recognised as a version mismatch, not as UNKNOWN', () => {
+  /* This is the bug behind a real report of "Something went wrong" on a button that had
+     just been added.
+
+     Static files are read from disk on every request, so a running app serves the CURRENT
+     index.html and app.js. Its ROUTES, though, were fixed when the process started. An app
+     left running across an update therefore hands the browser a front end that calls an
+     endpoint the server has never heard of - and Express answers "Cannot POST /api/..." as
+     an HTML page, with no code in it.
+
+     Falling back to UNKNOWN there was the worst possible answer: "Something went wrong",
+     no advice, for a situation fixed completely by restarting the app. The front end can
+     tell, though - a response with no code did not come from this app's fail(), so the
+     thing that answered is not the server this page expects. */
+  const { responseCode } = catalogue;
+
+  // A properly coded failure is passed through untouched.
+  assert.equal(responseCode({ code: 'PAGE_TIMEOUT', error: 'x' }), 'PAGE_TIMEOUT');
+  assert.equal(responseCode({ code: 'IMAGE_EXPIRED' }), 'IMAGE_EXPIRED');
+
+  // Anything without one means the answer did not come from a handler that knows us.
+  assert.equal(responseCode({}), 'SERVER_OUTDATED');
+  assert.equal(responseCode(null), 'SERVER_OUTDATED');
+  assert.equal(responseCode(undefined), 'SERVER_OUTDATED');
+  // What a non-JSON body degrades to once parsing has failed.
+  assert.equal(responseCode({ error: 'Cannot POST /api/reveal' }), 'SERVER_OUTDATED');
+  // A code that is present but useless is no code at all.
+  assert.equal(responseCode({ code: '' }), 'SERVER_OUTDATED');
+  assert.equal(responseCode({ code: 42 }), 'SERVER_OUTDATED');
+
+  // And it must be a real catalogue entry with advice attached.
+  const entry = lookup('SERVER_OUTDATED');
+  assert.equal(entry.code, 'SERVER_OUTDATED');
+  assert.ok(/restart/i.test(entry.fix), 'the fix should say to restart the app');
+});
+
 test('isRetryable marks only the errors worth retrying automatically', () => {
   assert.equal(isRetryable('SCAN_IN_PROGRESS'), true);
   assert.equal(isRetryable('INVALID_URL'), false);

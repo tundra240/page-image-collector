@@ -103,6 +103,18 @@ for (const [label, path, init] of UNCODED_CASES) {
   });
 }
 
+test('the front end never falls back to UNKNOWN for an API failure', async () => {
+  /* UNKNOWN says "Something went wrong" and offers no advice, so reaching it from a real
+     API response is always a worse answer than something specific. responseCode() in the
+     shared catalogue decides instead, which turns the commonest cause - an app left
+     running across an update, serving a new front end from an old process - into an
+     instruction to restart rather than a shrug. */
+  const app = await (await fetch(BASE + '/app.js')).text();
+  assert.match(app, /responseCode/, 'app.js should classify responses through the catalogue');
+  assert.ok(!/\|\|\s*'UNKNOWN'/.test(app),
+    'app.js must not default an API failure to UNKNOWN');
+});
+
 test('the front end reads its wording from the catalogue, not copies of it', async () => {
   /* Four browser-side codes were documented and then not used: app.js carried its own
      copies of their text. That is the drift the shared catalogue exists to prevent -

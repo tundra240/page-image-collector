@@ -28,6 +28,7 @@ may be reworded; **codes are the contract** and are what the app matches on.
 | [`BAD_REQUEST_PATH`](#bad-request-path) | server | 400 | No — advice only |
 | [`SERVER_ERROR`](#server-error) | server | 500 | No — advice only |
 | [`SERVER_UNREACHABLE`](#server-unreachable) | browser | — | Yes — `restart-server` |
+| [`SERVER_OUTDATED`](#server-outdated) | browser | — | Yes — `restart-server` |
 | [`NOTHING_SELECTED`](#nothing-selected) | browser | — | No — advice only |
 | [`NO_DIRECTORY_PICKER`](#no-directory-picker) | browser | — | No — advice only |
 | [`SAVE_READ_FAILED`](#save-read-failed) | browser | — | No — advice only |
@@ -324,6 +325,22 @@ Raised in the page itself, without a request reaching the server.
 - The server crashed
 
 **How to fix it.** Start it again with ./start-wsl.sh (or npm start), then reload the page with Ctrl+Shift+R.
+
+**Automatic handling:** `restart-server`.
+
+### SERVER_OUTDATED
+
+> The app needs restarting: this page and the server behind it are different versions.
+
+**What it means.** The server answered without an error code, which means the answer did not come from a part of this app that knows the contract. Almost always that is a version gap: static files are read from disk on every request, so a running app serves the CURRENT page and script — but its endpoints were fixed when the process started. An app left running across an update therefore hands the browser a front end that calls endpoints its own server has never heard of.
+
+**Common causes**
+
+- The app was updated while it was running, and has not been restarted since
+- A button exists on the page for a feature the running server does not have yet
+- Something other than this app is answering on the port
+
+**How to fix it.** Restart the app: close the launcher window (or press Ctrl+C in it), start it again, then reload the page with Ctrl+Shift+R. Nothing is lost by restarting — captured images were only ever held in memory.
 
 **Automatic handling:** `restart-server`.
 

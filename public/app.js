@@ -21,7 +21,7 @@ const recentRow = document.querySelector('#recent-row');
 const recentList = document.querySelector('#recent');
 const recentClear = document.querySelector('#recent-clear');
 // Same catalogue the server uses, loaded here as a plain script.
-const { lookup, repairUrl, isRetryable, isLocalHostname } = window.APP_ERRORS;
+const { lookup, repairUrl, isRetryable, isLocalHostname, responseCode } = window.APP_ERRORS;
 let images = [];
 let activeTypes = new Set();
 let progressTimer = null;
@@ -323,8 +323,12 @@ async function requestScan(url, limit, autoCap) {
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.error || lookup('UNKNOWN').message);
-    error.code = data.code || 'UNKNOWN';
+    /* The code decides the message, not the other way round. A response carrying no code
+       did not come from this app's error handling at all, and responseCode() says what
+       that most likely means rather than shrugging with UNKNOWN. */
+    const code = responseCode(data);
+    const error = new Error(code === 'SERVER_OUTDATED' ? lookup(code).message : (data.error || lookup(code).message));
+    error.code = code;
     throw error;
   }
   return data;
@@ -699,8 +703,14 @@ async function revealOnPage() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      // The catalogue's wording is better than anything invented here.
-      setDetailsStatus(data.error || lookup(data.code).message, true);
+      /* This button is the one that exposed the version gap: it was added, and anybody
+         whose app was still running got a front end calling an endpoint their server did
+         not have — answered as an HTML 404, with no code, and reported as "Something went
+         wrong". responseCode() now names that, and the hint below offers the restart. */
+      const code = responseCode(data);
+      setDetailsStatus(code === 'SERVER_OUTDATED'
+        ? lookup(code).message
+        : (data.error || lookup(code).message), true);
       return;
     }
     setDetailsStatus(REVEAL_OUTCOMES[data.how] || 'Opened the page and highlighted it.');
