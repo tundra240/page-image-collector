@@ -816,6 +816,32 @@ button:disabled {
   text-shadow: 0 1px 3px rgba(5, 7, 9, 0.92);
 }
 
+/* ------------------------------------------------------------------ credit */
+
+/* Sits at the end of main, so it follows the results rather than floating over them.
+   Quiet by default and only picking up the accent on hover: an attribution should be
+   findable without competing with the controls above it. */
+#credit {
+  margin: 44px 0 0;
+  font-size: 0.82rem;
+  /* --muted, not --faint: 7.47:1 against --bg where --faint is 4.02:1, which is under
+     the 4.5:1 minimum at this size. Same reason as the home-screen note. */
+  color: var(--muted);
+  text-shadow: 0 1px 3px rgba(5, 7, 9, 0.92);
+}
+#credit a {
+  color: var(--green);
+  text-decoration: 1px underline rgba(61, 220, 132, 0.35);
+  text-underline-offset: 3px;
+  border-radius: 4px;
+  transition: color 0.2s var(--ease), text-decoration-color 0.2s var(--ease);
+}
+#credit a:hover {
+  color: var(--green-hi);
+  text-decoration-color: var(--green-hi);
+}
+#credit a:focus-visible { outline: 2px solid var(--green-hi); outline-offset: 3px; }
+
 #grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));

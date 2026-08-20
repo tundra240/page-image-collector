@@ -289,6 +289,25 @@ activeTypes = Set()     // which content types are currently shown
   per-frame fraction silently runs faster on a 144Hz display — with the frame delta clamped the
   same way so returning to a hidden tab does not teleport anything.
 
+  **How sticky it feels was tuned against a measurement**, not by eye. Mean displacement still
+  remaining beside the cursor after it stops dead, against a cursor-free run of the same frames:
+
+  | After the cursor stops | 0 ms | 100 ms | 200 ms | 300 ms | 500 ms |
+  |---|---|---|---|---|---|
+  | First attempt | 16.0px | 14.5px | 14.9px | 11.8px | 6.6px |
+  | Now | 17.1px | 16.0px | 15.2px | 8.3px | **2.3px** |
+
+  A third of the displacement was still there half a second after the pointer stopped, which is
+  what read as clinging. Halving the settle time fixes it. Peak displacement came *down* at the
+  same time (≈67px → ≈43px) while the radius went *up*, and the falloff changed from a square to
+  a smoothstep: a narrow strong disturbance reads as a grip on one spot, a wide gentle one as a
+  body of liquid moving. The mean barely moved because the same displacement is spread wider.
+
+  Note the metric — an earlier one counted changed pixels and was worthless, since the lines are
+  a pixel or two wide and any residual offset past that pins the figure at ~200% whether the lines
+  are 2px or 60px out of place. Distance to the nearest line in the undisturbed frame is what
+  actually measures a displacement.
+
   It costs about **3%** (0.88–0.93 ms still, 0.93–0.95 ms with the cursor moving every frame),
   inside the run-to-run spread. Timing this needed a second attempt: dispatching one pointer move
   reported it as entirely free, because the lag closes after a single frame and the warp switches

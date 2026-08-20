@@ -213,7 +213,8 @@ attached to the content rather than pinned behind it.
 **Moving the cursor stirs it.** Drag the pointer across an empty part of the page and the
 contour lines near it are pulled along, then flow back once you stop — like drawing a finger
 through a liquid. Nothing is drawn under the cursor and no shape follows it around: the lines
-already there are simply displaced. Hold still and there is no trace of it at all.
+already there are simply displaced, over a wide soft area rather than gripped at a point, and
+they let go almost as quickly as they were pushed. Hold still and there is no trace of it at all.
 
 It holds 60 fps even while a scan is running, which took some care — a contour has to be *found*
 every frame rather than merely moved, so unlike the rest of the interface this one is drawn on a

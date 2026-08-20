@@ -166,6 +166,21 @@ test('the title is a real button that starts over', async () => {
   assert.match(body[0], /aria-disabled/, 'resetToHome must refuse to run during a scan');
 });
 
+test('the credit link is present and opens safely', async () => {
+  /* The only outbound link in the app, so the safety attributes are worth pinning.
+     Without rel="noopener" a target="_blank" link hands the opened tab a handle back to
+     this one; without noreferrer it sends this address along as the referrer. Neither is
+     needed by an attribution link, and both are easy to drop by accident. */
+  const html = await (await fetch(BASE + '/')).text();
+  const credit = html.match(/<footer id="credit">[\s\S]*?<\/footer>/);
+  assert.ok(credit, 'index.html must contain the credit footer');
+  assert.match(credit[0], /Made by:/, `the footer should read "Made by:": ${credit[0]}`);
+  assert.match(credit[0], /href="https:\/\/github\.com\/tundra240"/,
+    `the credit must link to the author's GitHub: ${credit[0]}`);
+  assert.match(credit[0], /rel="noopener noreferrer"/,
+    `an external target="_blank" link needs rel="noopener noreferrer": ${credit[0]}`);
+});
+
 test('the home screen has something on it before a scan', async () => {
   const html = await (await fetch(BASE + '/')).text();
   assert.ok(html.includes('id="home-panel"'), 'index.html must contain the home panel');

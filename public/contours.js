@@ -78,10 +78,34 @@
    settled cursor. Moving it every frame is the honest worst case.
 
    It stays cheap because the warp has COMPACT SUPPORT: samples outside the radius do
-   two comparisons and move on, and the ones inside do four multiplies and two
-   subtractions - no divide, no exp, and no square root anywhere, since the falloff
-   needs only squared distance. The listener does nothing but store two numbers,
-   leaving the already-running rAF loop to read them.
+   two comparisons and move on, and the ones inside do a handful of multiplies - no
+   divide, no exp, and no square root anywhere, since the falloff needs only squared
+   distance. The listener does nothing but store two numbers, leaving the
+   already-running rAF loop to read them.
+
+   HOW STICKY IT FEELS, AND HOW THAT WAS TUNED
+
+   Mean displacement still remaining in a patch beside the cursor, at intervals after
+   the cursor stopped dead. Both columns measured the same way, against a cursor-free
+   run of the identical frame sequence:
+
+     after the cursor stops     0ms     100ms    200ms    300ms    500ms
+     first attempt             16.0px   14.5px   14.9px   11.8px    6.6px
+     now                       17.1px   16.0px   15.2px    8.3px    2.3px
+
+   The first attempt was still a third displaced half a second after the pointer had
+   stopped, which is what read as clinging. Halving the settle time gets that down to
+   2.3px - the lines follow the cursor and then let go.
+
+   Peak displacement came DOWN at the same time, from about 67px to 43px, while the
+   radius went UP. That combination is deliberate: a narrow strong disturbance reads as
+   a grip on one spot, a wide gentle one reads as a body of liquid moving. The mean
+   above barely changed because the same amount of movement is spread over a wider area.
+
+   Note the metric. An earlier attempt counted changed pixels and was useless - the
+   lines are a pixel or two wide, so any residual offset past that pins the figure at
+   ~200% whether the lines are 2px or 60px out of place. Distance to the nearest line in
+   the undisturbed frame is what actually measures a displacement.
    ========================================================================== */
 
 (function () {
@@ -159,33 +183,42 @@
      everything, which is the opposite of a liquid, and it drowned the local effect it
      was supposed to support. The cursor now only ever does local work. */
 
-  /** How strongly the drag displaces the pattern, against the cursor's own movement. */
-  const POINTER_FLOW = 0.7;
+  /* How strongly the drag displaces the pattern, against the cursor's own movement.
+     Raised in step with the shorter settle time below: the drag is derived from the lag
+     that easing leaves behind, so halving the settle time halves the lag, and without
+     this the effect would have quietly become half as strong at the same time. */
+  const POINTER_FLOW = 1.2;
 
   /* Ceiling on that displacement, in field units. A violent flick produces a lag of
      several hundred pixels, and left unbounded that shears the pattern into streaks -
      the surface tears instead of flowing.
 
-     Tuned down from 1.15 after measuring. At that value a brisk drag moved 192% of the
-     lit pixels near the cursor, meaning essentially every line had left where it was:
-     accurate to the physics, but far more than "subtle". This is under half of it. */
-  const POINTER_FLOW_MAX = 0.5;
+     Tuned down from 1.15 after measuring: at that value a brisk drag moved 192% of the
+     lit pixels near the cursor, meaning essentially every line had left where it was.
+     Accurate to the physics, far more than "subtle". */
+  const POINTER_FLOW_MAX = 0.32;
 
-  /** Reach of the disturbance, in field units. Wider than a ripple would be: a liquid
-      pushed in one place moves some way around it. */
-  const POINTER_RADIUS = 2.2;
+  /* Reach of the disturbance, in field units. Wide on purpose - a narrow one reads as
+     something gripping a spot and pulling it, where a wide one reads as a body of
+     liquid moving. This is the main dial for how "magnetic" it feels. */
+  const POINTER_RADIUS = 2.9;
 
   /* Time constant for easing the tracked position toward the real one, in the sense
      used by progress.js: the remaining gap shrinks to about 37% of itself in this
      many milliseconds. Eased on ELAPSED TIME rather than per frame for exactly the
      reason set out there - a per-frame fraction silently runs faster on a 144Hz
      display, and every dropped frame becomes a visible hitch. */
-  /* Longer than a UI easing would be, on purpose. This is doing two jobs at once: it
-     is how long the lines take to settle after the cursor stops, and - because the drag
-     is derived from the gap this easing leaves behind - it is also what sets how much
-     the surface gives while the cursor is moving. Shorter reads as taut and springy;
-     this is slow enough to feel viscous. */
-  const POINTER_EASE_MS = 300;
+  /* How long the lines take to flow back once the cursor stops.
+
+     This is the dial for "sticky". At 300ms the surface stayed displaced well after the
+     pointer had moved on, so the lines read as clinging to it - dragged along like
+     something magnetic rather than something being stirred. Halved, they return almost
+     as fast as they were pushed, which is what a thin liquid does.
+
+     It has a second effect, which is why the flow constant above moved with it: the drag
+     comes from the gap this easing leaves behind, so a shorter settle also means a
+     smaller gap. */
+  const POINTER_EASE_MS = 150;
 
   const still = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -350,7 +383,14 @@
           const dx = colX - ringX;
           const falloff = 1 - (dx * dx + dy2) * invR2;
           if (falloff > 0) {
-            const weight = falloff * falloff;
+            /* Smoothstep rather than the square this used to be, and the difference is
+               how magnetic the thing feels. A square peaks to a point directly under the
+               cursor, so the strongest displacement is concentrated at one spot and the
+               eye reads it as a grip. Smoothstep is flat at BOTH ends - a broad soft
+               plateau near the cursor easing to nothing at the rim - so a whole area
+               moves together and the shearing happens out in the surrounding ring, which
+               is where a liquid's motion actually shows. */
+            const weight = falloff * falloff * (3 - 2 * falloff);
             px -= flowX * weight;
             py -= flowY * weight;
           }

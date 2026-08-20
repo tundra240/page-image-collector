@@ -18,7 +18,7 @@
       report a lower percentage than it did a moment ago, but a bar that retreats
       reads as a bug.
 
-   3. Creep during stalls. Some waits are unavoidable, and a stationary bar looks
+   3. Creep during stalls. Some  waits are unavoidable, and a stationary bar looks
       frozen. So the bar drifts forward when there is no news - but by at most
       CREEP_ROOM percent, because this is the one part of the module that shows
       motion not backed by real progress, and it should never be able to lie by

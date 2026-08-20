@@ -63,6 +63,10 @@
       <div id="grid"></div>
     </section>
     <button id="to-top" type="button" aria-label="Back to top" title="Back to top">↑</button>
+    <!-- The one outbound link in the app. rel="noopener noreferrer" because target="_blank"
+         otherwise hands the opened tab a handle back to this one, and sends this address
+         as the referrer - neither of which an attribution link needs. -->
+    <footer id="credit">Made by: <a href="https://github.com/tundra240" target="_blank" rel="noopener noreferrer">tundra240</a></footer>
     <dialog id="details" aria-labelledby="details-title">
       <div class="details-head"><strong id="details-title"></strong><button id="details-close" type="button" aria-label="Close" title="Close">×</button></div>
       <pre id="details-json" tabindex="0"></pre>
